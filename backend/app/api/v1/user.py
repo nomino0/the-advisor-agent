@@ -46,8 +46,20 @@ def _get_client_ip(request: Request) -> str:
 
 
 @router.get("/profile", response_model=UserResponse)
-async def get_profile(current_user: User = Depends(get_current_user)):
+async def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get the current user's profile."""
+    from sqlalchemy import select as sa_select
+    from app.models.user_connection import UserConnection
+    gh_result = await db.execute(
+        sa_select(UserConnection).where(
+            UserConnection.user_id == current_user.id,
+            UserConnection.provider == "github",
+        )
+    )
+    github_connected = gh_result.scalar_one_or_none() is not None
     return UserResponse(
         id=current_user.id,
         email=current_user.email,
@@ -55,6 +67,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         role=current_user.role.value if isinstance(current_user.role, UserRole) else current_user.role,
         is_active=current_user.is_active,
         totp_enabled=current_user.totp_enabled,
+        github_connected=github_connected,
         created_at=current_user.created_at.isoformat(),
     )
 

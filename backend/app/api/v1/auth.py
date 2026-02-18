@@ -8,6 +8,7 @@ from slowapi.util import get_remote_address
 
 from app.db.session import get_db
 from app.models.user import User, UserRole
+from app.models.user_connection import UserConnection
 from app.schemas.auth import (
     RegisterRequest,
     LoginRequest,
@@ -37,7 +38,7 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _user_response(user: User) -> UserResponse:
+def _user_response(user: User, github_connected: bool = False) -> UserResponse:
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -45,6 +46,7 @@ def _user_response(user: User) -> UserResponse:
         role=user.role.value if isinstance(user.role, UserRole) else user.role,
         is_active=user.is_active,
         totp_enabled=user.totp_enabled,
+        github_connected=github_connected,
         created_at=user.created_at.isoformat(),
     )
 
@@ -330,6 +332,16 @@ async def disable_2fa(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
     """Get current user profile."""
-    return _user_response(current_user)
+    gh_result = await db.execute(
+        select(UserConnection).where(
+            UserConnection.user_id == current_user.id,
+            UserConnection.provider == "github",
+        )
+    )
+    github_connected = gh_result.scalar_one_or_none() is not None
+    return _user_response(current_user, github_connected=github_connected)

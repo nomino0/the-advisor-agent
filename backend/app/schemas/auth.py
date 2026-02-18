@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     totp_enabled: bool
+    github_connected: bool = False
     created_at: str
 
     class Config:

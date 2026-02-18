@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Trash2, Edit, Plus, Upload, Play, RefreshCw, Key, FileText, Settings, Database, Server } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeProvider";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Stats {
   total_users: number;
@@ -53,7 +54,7 @@ interface RAGDocument {
 }
 
 export default function AdminPage() {
-  const router = useRouter();
+  const { token, loading: authLoading } = useAuth({ requireAuth: true, requireAdmin: true });
   const [stats, setStats] = useState<Stats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -77,9 +78,7 @@ export default function AdminPage() {
 
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!token) return;
     try {
       setLoading(true);
@@ -97,20 +96,15 @@ export default function AdminPage() {
       setDocuments(d);
     } catch (e) {
       console.error(e);
-      // alert("Access denied or failed to load admin data"); 
-      // router.push("/dashboard");
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    if (authLoading || !token) return;
     loadData();
-  }, [token, router]);
+  }, [authLoading, token, loadData]);
 
   const handleSaveProvider = async () => {
     try {
@@ -186,7 +180,7 @@ export default function AdminPage() {
     }
   };
 
-  if (loading && !stats) {
+  if (authLoading || (loading && !stats)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/ThemeProvider";
+import { useAuth } from "@/hooks/useAuth";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +50,7 @@ interface GrantStatus {
 
 export default function NewAnalysisPage() {
   const router = useRouter();
+  const { token } = useAuth({ requireAuth: true });
   const [provider, setProvider] = useState<Provider | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -75,9 +77,6 @@ export default function NewAnalysisPage() {
   const [countdown, setCountdown] = useState(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
-
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
 
   // ------------------------------------------------------------------
   // GitHub connection check
@@ -495,7 +494,7 @@ export default function NewAnalysisPage() {
 
             {/* Private repo - GitHub connection panel */}
             {repoVisibility === "private" && (
-              <div className="mb-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 p-5">
+              <div className="mb-6 rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 p-5">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
                   GitHub Account Access
                 </h3>
@@ -661,7 +660,7 @@ export default function NewAnalysisPage() {
                 </p>
               )}
 
-              <div className="flex items-start gap-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-3">
+              <div className="flex items-start gap-2 bg-green-50/60 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-lg p-3.5">
                 <svg
                   className="w-4 h-4 text-green-400 mt-0.5 shrink-0"
                   fill="none"
@@ -952,7 +951,7 @@ export default function NewAnalysisPage() {
             {grantStep === "command" && grantData && (
               <div className="space-y-6">
                 {/* Token status bar */}
-                <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
+                <div className="flex items-center justify-between bg-green-50/60 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-lg px-4 py-3">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                     <span className="text-sm text-slate-700 dark:text-slate-300">Token active</span>
@@ -1012,7 +1011,7 @@ export default function NewAnalysisPage() {
                 </div>
 
                 {/* Security info */}
-                <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg p-4 flex items-start gap-3">
+                <div className="bg-cyan-50/60 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-900/50 rounded-lg p-4 flex items-start gap-3">
                   <svg
                     className="w-5 h-5 text-cyan-400 mt-0.5 shrink-0"
                     fill="none"

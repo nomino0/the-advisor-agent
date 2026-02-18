@@ -31,10 +31,6 @@ export default function SettingsPage() {
   const [patSaving, setPatSaving] = useState(false);
   const [patMsg, setPatMsg] = useState("");
 
-  // Session token display
-  const [showToken, setShowToken] = useState(false);
-  const [copied, setCopied] = useState(false);
-
   // Account info
   const [fullName, setFullName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -76,7 +72,7 @@ export default function SettingsPage() {
       await api("/api/v1/auth/2fa/verify", {
         method: "POST",
         token: token!,
-        body: { totp_code: totpCode },
+        body: { token: totpCode },
       });
       setTotpMsg("2FA enabled successfully!");
       setTotpSetup(null);
@@ -133,8 +129,8 @@ export default function SettingsPage() {
     setSaving(true);
     setSaveMsg("");
     try {
-      await api("/api/v1/auth/me", {
-        method: "PATCH",
+      await api("/api/v1/user/profile", {
+        method: "PUT",
         token: token!,
         body: { full_name: fullName },
       });
@@ -151,13 +147,6 @@ export default function SettingsPage() {
     }
   };
 
-  const handleCopyToken = () => {
-    if (!token) return;
-    navigator.clipboard.writeText(token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   if (profileLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
@@ -165,8 +154,6 @@ export default function SettingsPage() {
       </div>
     );
   }
-
-  const maskedToken = token ? token.slice(0, 14) + "•••••••••••••••" + token.slice(-6) : "";
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -229,62 +216,6 @@ export default function SettingsPage() {
               {saving ? "Saving..." : "Save Changes"}
             </button>
           </form>
-        </section>
-
-        {/* ── Session Token ── */}
-        <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Session Token</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Your active JWT — used in the CLI grant command.
-              </p>
-            </div>
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-              Active
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
-            <svg
-              className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z"
-              />
-            </svg>
-            <code className="flex-1 text-xs text-slate-700 dark:text-slate-300 font-mono truncate select-all">
-              {showToken ? token : maskedToken}
-            </code>
-            <button
-              type="button"
-              onClick={() => setShowToken((v) => !v)}
-              className="shrink-0 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500"
-            >
-              {showToken ? "Hide" : "Show"}
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyToken}
-              className={`shrink-0 text-xs transition px-2.5 py-1 rounded border ${
-                copied
-                  ? "bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-300 dark:border-green-700"
-                  : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500"
-              }`}
-            >
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
-            Keep this token secret. It grants authenticated API access.
-          </p>
         </section>
 
         {/* ── Two-Factor Authentication ── */}
