@@ -484,7 +484,8 @@ async def connect_and_analyze(
         )
     )
     connection = result.scalar_one_or_none()
-    if connection and connection.access_token_enc:
+    _PLACEHOLDER_TOKENS = {"mock_token", "mock", "", None}
+    if connection and connection.access_token_enc not in _PLACEHOLDER_TOKENS:
         access_token = connection.access_token_enc  # decrypt in production
 
     # ── Fetch the repository (P2P ephemeral method) ──────────────────────

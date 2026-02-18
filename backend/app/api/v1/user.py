@@ -150,10 +150,16 @@ async def add_connection(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail=f"{body.provider} already connected")
 
+    if not body.access_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A Personal Access Token (PAT) is required to connect {body.provider}.",
+        )
+
     conn = UserConnection(
         user_id=current_user.id,
         provider=body.provider,
-        access_token_enc=body.access_token or "mock_token",  # encrypted in prod
+        access_token_enc=body.access_token,  # store plaintext; encrypt at rest in production
         provider_username=body.provider_username,
         scope="read:repo" if body.provider in ("github", "gitlab") else "drive.readonly",
     )
