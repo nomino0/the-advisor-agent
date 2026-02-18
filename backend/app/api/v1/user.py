@@ -22,6 +22,10 @@ class UpdateProfileRequest(BaseModel):
     email: Optional[str] = Field(None, max_length=255)
 
 
+class AddGithubPATRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
 class ConnectionResponse(BaseModel):
     id: str
     provider: str
@@ -104,6 +108,66 @@ async def update_profile(
         is_active=current_user.is_active,
         totp_enabled=current_user.totp_enabled,
         created_at=current_user.created_at.isoformat(),
+    )
+
+
+@router.post("/github/pat", response_model=ConnectionResponse)
+async def update_github_pat(
+    body: AddGithubPATRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update or create a GitHub Personal Access Token connection.
+    This endpoint allows replacing the token if one already exists.
+    """
+    # 1. Check existing connection
+    result = await db.execute(
+        select(UserConnection).where(
+            UserConnection.user_id == current_user.id,
+            UserConnection.provider == "github",
+        )
+    )
+    conn = result.scalar_one_or_none()
+
+    if conn:
+        # Update existing
+        conn.access_token_enc = body.token
+        conn.scope = "repo"  # Assume repo scope for PAT
+        # Clear OAuth specific fields if any
+        conn.provider_username = None
+        conn.refresh_token_enc = None
+        conn.expires_at = None
+    else:
+        # Create new
+        conn = UserConnection(
+            user_id=current_user.id,
+            provider="github",
+            access_token_enc=body.token,
+            scope="repo",
+            provider_username=None,
+        )
+        db.add(conn)
+
+    await db.flush()
+    await db.refresh(conn)
+
+    await record_audit(
+        db,
+        action="user.connection_update",
+        user_id=current_user.id,
+        resource="connections",
+        details="Updated GitHub PAT",
+        ip_address=_get_client_ip(request),
+    )
+
+    return ConnectionResponse(
+        id=str(conn.id),
+        provider=conn.provider,
+        provider_username=conn.provider_username,
+        scope=conn.scope,
+        created_at=conn.created_at.isoformat(),
     )
 
 
