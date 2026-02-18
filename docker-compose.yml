@@ -1,0 +1,83 @@
+# ============================================
+# CloudWise AI — Docker Compose
+# ============================================
+version: "3.9"
+
+services:
+  # ─── PostgreSQL ────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: cloudwise-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cloudwise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudwise_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-cloudwise_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudwise -d cloudwise_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── Redis ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: cloudwise-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── Backend (FastAPI) ─────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cloudwise-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cloudwise}:${POSTGRES_PASSWORD:-cloudwise_secret}@postgres:5432/${POSTGRES_DB:-cloudwise_db}
+      REDIS_URL: redis://redis:6379/0
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - upload_data:/app/uploads
+
+  # ─── Frontend (Next.js) ────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    container_name: cloudwise-frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  upload_data:
