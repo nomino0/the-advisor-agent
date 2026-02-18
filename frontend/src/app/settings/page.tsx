@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
@@ -20,21 +21,13 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
-  // 2FA
-  const [totpSetup, setTotpSetup] = useState<{ qr_code: string; secret: string } | null>(null);
-  const [totpCode, setTotpCode] = useState("");
-  const [totpLoading, setTotpLoading] = useState(false);
-  const [totpMsg, setTotpMsg] = useState("");
-
   // PAT / GitHub
   const [patToken, setPatToken] = useState("");
   const [patSaving, setPatSaving] = useState(false);
-  const [patMsg, setPatMsg] = useState("");
 
   // Account info
   const [fullName, setFullName] = useState("");
   const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState("");
 
   useEffect(() => {
     if (!token) return;
@@ -51,72 +44,22 @@ export default function SettingsPage() {
 
   // ── 2FA ────────────────────────────────────────────────────────────────────
 
-  const handleSetup2FA = async () => {
-    setTotpLoading(true);
-    setTotpMsg("");
-    try {
-      const data = await api("/api/v1/auth/2fa/setup", { method: "POST", token: token! });
-      setTotpSetup(data);
-    } catch (e: any) {
-      setTotpMsg(e.message || "Failed to start 2FA setup");
-    } finally {
-      setTotpLoading(false);
-    }
-  };
-
-  const handleVerify2FA = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setTotpLoading(true);
-    setTotpMsg("");
-    try {
-      await api("/api/v1/auth/2fa/verify", {
-        method: "POST",
-        token: token!,
-        body: { token: totpCode },
-      });
-      setTotpMsg("2FA enabled successfully!");
-      setTotpSetup(null);
-      setTotpCode("");
-      setProfile((p) => (p ? { ...p, totp_enabled: true } : p));
-    } catch (e: any) {
-      setTotpMsg(e.message || "Invalid code");
-    } finally {
-      setTotpLoading(false);
-    }
-  };
-
-  const handleDisable2FA = async () => {
-    if (!confirm("Disable two-factor authentication?")) return;
-    setTotpLoading(true);
-    setTotpMsg("");
-    try {
-      await api("/api/v1/auth/2fa/disable", { method: "POST", token: token! });
-      setTotpMsg("2FA disabled.");
-      setProfile((p) => (p ? { ...p, totp_enabled: false } : p));
-    } catch (e: any) {
-      setTotpMsg(e.message || "Failed to disable 2FA");
-    } finally {
-      setTotpLoading(false);
-    }
-  };
-
   // ── GitHub PAT ─────────────────────────────────────────────────────────────
 
   const handleSavePAT = async (e: React.FormEvent) => {
     e.preventDefault();
     setPatSaving(true);
-    setPatMsg("");
     try {
-      await api("/api/v1/auth/github/pat", {
+      await api("/api/v1/user/github/pat", {
         method: "POST",
         token: token!,
         body: { token: patToken },
       });
-      setPatMsg("GitHub token saved successfully!");
+      toast.success("GitHub token saved successfully!");
       setPatToken("");
       setProfile((p) => (p ? { ...p, github_connected: true } : p));
     } catch (e: any) {
-      setPatMsg(e.message || "Invalid token");
+      toast.error(e.message || "Invalid token");
     } finally {
       setPatSaving(false);
     }
@@ -127,21 +70,20 @@ export default function SettingsPage() {
   const handleSaveAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    setSaveMsg("");
     try {
       await api("/api/v1/user/profile", {
         method: "PUT",
         token: token!,
         body: { full_name: fullName },
       });
-      setSaveMsg("Saved!");
+      toast.success("Saved!");
       setProfile((p) => (p ? { ...p, full_name: fullName } : p));
-      const stored = localStorage.getItem("user");
+      const stored = sessionStorage.getItem("user");
       if (stored) {
-        localStorage.setItem("user", JSON.stringify({ ...JSON.parse(stored), full_name: fullName }));
+        sessionStorage.setItem("user", JSON.stringify({ ...JSON.parse(stored), full_name: fullName }));
       }
     } catch (e: any) {
-      setSaveMsg(e.message || "Failed to save");
+      toast.error(e.message || "Failed to save");
     } finally {
       setSaving(false);
     }
@@ -203,11 +145,6 @@ export default function SettingsPage() {
                 className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
               />
             </div>
-            {saveMsg && (
-              <p className={`text-sm ${saveMsg === "Saved!" ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-                {saveMsg}
-              </p>
-            )}
             <button
               type="submit"
               disabled={saving}
@@ -232,65 +169,13 @@ export default function SettingsPage() {
             </span>
           </div>
 
-          {totpMsg && (
-            <p className={`text-sm mb-4 ${totpMsg.includes("success") || totpMsg.includes("enabled") ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-              {totpMsg}
-            </p>
-          )}
-
-          {!profile?.totp_enabled && !totpSetup && (
-            <button
-              onClick={handleSetup2FA}
-              disabled={totpLoading}
-              className="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 text-sm"
+          {!profile?.totp_enabled && (
+            <Link
+              href="/2fa-setup"
+              className="inline-block bg-blue-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-blue-700 transition text-sm"
             >
-              {totpLoading ? "Setting up..." : "Enable 2FA"}
-            </button>
-          )}
-
-          {totpSetup && (
-            <div className="space-y-4">
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                Scan the QR code with your authenticator app (Google Authenticator, Authy, etc.)
-              </p>
-              {totpSetup.qr_code && (
-                <img
-                  src={totpSetup.qr_code}
-                  alt="2FA QR Code"
-                  className="w-48 h-48 rounded-lg border border-slate-200 dark:border-slate-700"
-                />
-              )}
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono bg-slate-50 dark:bg-slate-800 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                Manual key: {totpSetup.secret}
-              </p>
-              <form onSubmit={handleVerify2FA} className="flex gap-3">
-                <input
-                  type="text"
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value)}
-                  placeholder="Enter 6-digit code"
-                  maxLength={6}
-                  className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition font-mono"
-                />
-                <button
-                  type="submit"
-                  disabled={totpLoading}
-                  className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50 text-sm"
-                >
-                  {totpLoading ? "Verifying..." : "Verify"}
-                </button>
-              </form>
-            </div>
-          )}
-
-          {profile?.totp_enabled && !totpSetup && (
-            <button
-              onClick={handleDisable2FA}
-              disabled={totpLoading}
-              className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-5 py-2 rounded-lg font-medium hover:bg-red-100 dark:hover:bg-red-900/30 transition disabled:opacity-50 text-sm"
-            >
-              {totpLoading ? "Disabling..." : "Disable 2FA"}
-            </button>
+              Setup 2FA
+            </Link>
           )}
         </section>
 
@@ -307,12 +192,6 @@ export default function SettingsPage() {
               {profile?.github_connected ? "Connected" : "Not connected"}
             </span>
           </div>
-
-          {patMsg && (
-            <p className={`text-sm mb-4 ${patMsg.includes("success") ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-              {patMsg}
-            </p>
-          )}
 
           <form onSubmit={handleSavePAT} className="space-y-3">
             <div>

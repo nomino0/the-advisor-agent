@@ -20,6 +20,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.api.dependencies import get_current_user
 from app.models.user import User
@@ -612,6 +613,7 @@ async def connect_and_analyze(
 # ---------- POST /analysis/upload — Direct upload (streamed to ephemeral tmpfs) ----------
 
 @router.post("/upload", response_model=AnalysisSummary, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def upload_and_analyze(
     request: Request,
     background_tasks: BackgroundTasks,

@@ -1716,6 +1716,17 @@ Layer 5: AI-Powered Contextual Analysis
 | **Rate Limiting** | Per-user, per-endpoint rate limits |
 | **Input Sanitization** | All inputs validated and sanitized server-side |
 
+### 16.4 Enhanced Authentication Flow (Strict Session Management)
+
+To ensure maximum security around session termination (the "Close Tab = Logout" requirement):
+
+1. **Session Storage for Tokens**: Access and Refresh tokens are stored in `sessionStorage` on the client side. This storage is inherently cleared by the browser when the tab or window is closed.
+2. **Zombie Cookie Cleanup**: If a user returns to the application with a lingering HttpOnly cookie (which persists across tab closures) but *without* the corresponding `sessionStorage` tokens, the application interprets this as an inconsistent state (likely a closed tab). It immediately:
+    - Invalidates the session on the backend.
+    - Clears the lingering cookies.
+    - Redirects the user to the login page with a "Session Expired" notification.
+3. **Dedicated 2FA Setup**: The 2FA setup process has been moved to a dedicated, isolated page (`/2fa-setup`) to prevent state leaks and ensure users complete the process before accessing the dashboard.
+
 ---
 
 ## 17. Data Privacy & Peer-to-Peer Architecture
@@ -1989,6 +2000,40 @@ class ToolOutputValidator:
 | **Dependency Scanning** | CI/CD pipeline with Dependabot/Snyk | Required |
 | **Penetration Testing** | Pre-launch and quarterly | Required |
 | **Incident Response** | Documented runbook | Required |
+
+## 19.5 Enterprise Security Hardening (Infrastructure & Application Layer)
+
+We have implemented strict enterprise-grade security controls directly in the application code and infrastructure.
+
+### 19.5.1 Advanced Rate Limiting (Distributed)
+
+To prevent brute force, credential stuffing, and Denial of Service (DoS) attacks, we employ a **Redis-backed distributed rate limiter**.
+
+- **Global Limit**: `200 requests/minute` per IP address.
+- **Sensitive Endpoint Limits**:
+  - `/api/v1/auth/login`: `10 requests/minute` (Prevents brute force on accounts).
+  - `/api/v1/auth/register`: `5 requests/minute` (Prevents bot account creation).
+  - `/api/v1/analysis/upload`: `5 requests/minute` (Prevents resource exhaustion via large file uploads).
+
+### 19.5.2 Frontend Content Security Policy (CSP) & Headers
+
+To mitigate Cross-Site Scripting (XSS), Clickjacking, and data exfiltration, the following strict headers are injected into every frontend response via `next.config.js`:
+
+| Header | Value | Purpose |
+|---|---|---|
+| **Content-Security-Policy** | `default-src 'self'; script-src 'self' ...` | Restrict resource loading to trusted domains. |
+| **Strict-Transport-Security** | `max-age=63072000; includeSubDomains; preload` | Force HTTPS for 2 years. |
+| **X-Frame-Options** | `SAMEORIGIN` | Prevent clickjacking (iframe embedding). |
+| **X-Content-Type-Options** | `nosniff` | Prevent MIME-sniffing attacks. |
+| **Referrer-Policy** | `strict-origin-when-cross-origin` | Protect user privacy/URL data. |
+| **Permissions-Policy** | `geolocation=(), camera=(), microphone=()` | Disable unused browser features. |
+
+### 19.5.3 Host Header Validation
+
+To prevent Host Header Injection attacks (which can lead to cache poisoning or password reset link manipulation), the backend includes `TrustedHostMiddleware`.
+
+- **Configuration**: The API *only* responds to requests where the `Host` header matches the configured domain (e.g., `api.cloudwise.ai`) or `localhost`.
+- **Action**: All other requests are rejected immediately.
 
 ---
 

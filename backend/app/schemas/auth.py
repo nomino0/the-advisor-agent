@@ -19,6 +19,7 @@ class TwoFactorLoginRequest(BaseModel):
     """Complete 2FA login with the pending token and TOTP code."""
     pending_token: str
     totp_code: str = Field(..., min_length=6, max_length=6)
+    trust_device: bool = False
 
 
 class UserResponse(BaseModel):

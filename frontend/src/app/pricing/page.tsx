@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/ThemeProvider";
 
@@ -116,12 +117,12 @@ export default function PricingPage() {
               </ul>
               <button
                 onClick={() => {
-                  const token = localStorage.getItem("access_token");
+                  const token = typeof window !== "undefined" ? sessionStorage.getItem("access_token") : null;
                   if (!token) {
                     router.push("/login");
                     return;
                   }
-                  alert(
+                  toast.success(
                     `Subscription to ${plan.name} plan \u2014 Stripe checkout would open here.`
                   );
                 }}

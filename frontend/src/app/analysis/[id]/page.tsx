@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/ThemeProvider";
 
@@ -114,7 +115,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
   const [unlocking, setUnlocking] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "findings" | "cloud" | "deploy">("overview");
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const token = typeof window !== "undefined" ? sessionStorage.getItem("access_token") : null;
 
   useEffect(() => {
     if (!token) {
@@ -148,7 +149,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
       const data = await api(`/api/v1/analysis/${id}`, { token: token! });
       setReport(data);
     } catch (err: any) {
-      alert(err.message || "Failed to unlock");
+      toast.error(err.message || "Failed to unlock");
     } finally {
       setUnlocking(false);
     }

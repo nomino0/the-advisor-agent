@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import toast from "react-hot-toast";
 import { api } from "@/lib/api";
 import { Trash2, Edit, Plus, Upload, Play, RefreshCw, Key, FileText, Settings, Database, Server } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeProvider";
@@ -132,7 +133,7 @@ export default function AdminPage() {
       setProviderForm({ name: "", provider_type: "openai", base_url: "", api_key: "", models: "", priority: 10 });
       loadData();
     } catch (e) {
-      alert("Failed to save provider");
+      toast.error("Failed to save provider");
     }
   };
 
@@ -142,7 +143,7 @@ export default function AdminPage() {
       await api(`/api/v1/config/llm/${id}`, { method: "DELETE", token: token! });
       loadData();
     } catch (e) {
-      alert("Failed to delete provider");
+      toast.error("Failed to delete provider");
     }
   };
 
@@ -164,7 +165,7 @@ export default function AdminPage() {
       if (!res.ok) throw new Error("Upload failed");
       loadData();
     } catch (e) {
-      alert("Upload failed");
+      toast.error("Upload failed");
     } finally {
       setUploadingDoc(false);
     }
@@ -173,10 +174,10 @@ export default function AdminPage() {
   const handleIndexDoc = async (id: string) => {
     try {
       await api(`/api/v1/admin/rag/${id}/index`, { method: "POST", token: token! });
-      alert("Indexing started in background");
+      toast.success("Indexing started in background");
       loadData();
     } catch (e) {
-      alert("Failed to start indexing");
+      toast.error("Failed to start indexing");
     }
   };
 

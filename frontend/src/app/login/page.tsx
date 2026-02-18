@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "react-hot-toast";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/ThemeProvider";
 import { saveAuth, getToken, getUser } from "@/hooks/useAuth";
@@ -20,17 +21,17 @@ export default function LoginPage() {
   }, [router]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   // 2FA challenge state
   const [requires2FA, setRequires2FA] = useState(false);
   const [pendingToken, setPendingToken] = useState("");
   const [totpCode, setTotpCode] = useState("");
+  const [trustDevice, setTrustDevice] = useState(false);
 
+  // ── handleSubmit (Email/Password) ──────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
 
     try {
@@ -42,32 +43,44 @@ export default function LoginPage() {
       if (data.requires_2fa) {
         setRequires2FA(true);
         setPendingToken(data.pending_token);
+        // Clean up password from state for security
+        setPassword("");
+        toast.success("Please enter your 2FA code");
       } else {
         saveAuth(data);
-        router.push(data.user?.role === "admin" ? "/admin" : "/dashboard");
+        toast.success("Logged in successfully");
+        const redirectPath = data.user?.role === "admin" ? "/admin" : "/dashboard";
+        router.push(redirectPath);
       }
     } catch (err: any) {
-      setError(err.message || "Login failed");
+      toast.error(err.message || "Login failed");
     } finally {
       setLoading(false);
     }
   };
 
+  // ── handle2FASubmit (TOTP Code) ──────────────────────────────────────────
   const handle2FASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
 
     try {
+      // Send the trust_device flag if checked
       const data = await api("/api/v1/auth/2fa/login", {
         method: "POST",
-        body: { pending_token: pendingToken, totp_code: totpCode },
+        body: { 
+          pending_token: pendingToken, 
+          totp_code: totpCode,
+          trust_device: trustDevice 
+        },
       });
 
       saveAuth(data);
-      router.push(data.user?.role === "admin" ? "/admin" : "/dashboard");
+      toast.success("2FA verified successfully");
+      const redirectPath = data.user?.role === "admin" ? "/admin" : "/dashboard";
+      router.push(redirectPath);
     } catch (err: any) {
-      setError(err.message || "Invalid 2FA code");
+      toast.error(err.message || "Invalid 2FA code");
       setTotpCode("");
     } finally {
       setLoading(false);
@@ -104,12 +117,6 @@ export default function LoginPage() {
             onSubmit={handle2FASubmit}
             className="bg-white dark:bg-slate-900 rounded-xl p-8 shadow-sm border border-slate-200 dark:border-slate-800"
           >
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
-                {error}
-              </div>
-            )}
-
             <div className="mb-6">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 TOTP Code
@@ -130,6 +137,20 @@ export default function LoginPage() {
               />
             </div>
 
+            <div className="mb-6">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={trustDevice}
+                    onChange={(e) => setTrustDevice(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-600 dark:text-slate-400">
+                    Don't ask on this device for 7 days
+                  </span>
+                </label>
+            </div>
+
             <button
               type="submit"
               disabled={loading || totpCode.length !== 6}
@@ -144,7 +165,6 @@ export default function LoginPage() {
                 setRequires2FA(false);
                 setPendingToken("");
                 setTotpCode("");
-                setError("");
               }}
               className="w-full mt-3 text-slate-600 dark:text-slate-400 text-sm hover:underline"
             >
@@ -156,12 +176,6 @@ export default function LoginPage() {
             onSubmit={handleSubmit}
             className="bg-white dark:bg-slate-900 rounded-xl p-8 shadow-sm border border-slate-200 dark:border-slate-800"
           >
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
-                {error}
-              </div>
-            )}
-
             <div className="mb-4">
               <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                 Email

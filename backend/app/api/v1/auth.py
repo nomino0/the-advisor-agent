@@ -1,11 +1,9 @@
 """Authentication endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, timezone
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.models.user_connection import UserConnection
@@ -21,13 +19,12 @@ from app.schemas.auth import (
     TokenRefreshRequest,
 )
 from app.security.password import hash_password, verify_password
-from app.security.jwt import create_access_token, create_refresh_token, create_2fa_pending_token, decode_token
+from app.security.jwt import create_access_token, create_refresh_token, create_2fa_pending_token, create_trusted_device_token, decode_token
 from app.security.totp import generate_totp_secret, get_totp_uri, generate_qr_code_base64, verify_totp
 from app.api.dependencies import get_current_user
 from app.services.audit_service import record_audit
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 
 def _get_client_ip(request: Request) -> str:
@@ -90,6 +87,7 @@ async def register(
 async def login(
     request_body: LoginRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Login with email and password. Returns tokens directly or requires 2FA."""
@@ -118,21 +116,36 @@ async def login(
 
     # If 2FA is enabled, return a temporary pending token instead of full access
     if user.totp_enabled:
-        pending_token = create_2fa_pending_token(
-            {"sub": str(user.id), "email": user.email}
-        )
-        await record_audit(
-            db, action="user.login_2fa_pending", user_id=user.id,
-            resource="auth", details="Login succeeded, awaiting 2FA verification",
-            ip_address=_get_client_ip(request),
-        )
-        return {
-            "requires_2fa": True,
-            "pending_token": pending_token,
-            "message": "2FA verification required. Send TOTP code to /auth/2fa/login.",
-        }
+        # Check for trusted device token
+        trusted_token = request.cookies.get("trusted_device_token")
+        should_challenge = True
+        
+        if trusted_token:
+            payload = decode_token(trusted_token)
+            if payload and payload.get("type") == "trusted_device" and payload.get("sub") == str(user.id):
+                should_challenge = False
+                await record_audit(
+                    db, action="user.login_trusted_device", user_id=user.id,
+                    resource="auth", details="Skipped 2FA via trusted device token",
+                    ip_address=_get_client_ip(request),
+                )
 
-    # No 2FA — issue full tokens
+        if should_challenge:
+            pending_token = create_2fa_pending_token(
+                {"sub": str(user.id), "email": user.email}
+            )
+            await record_audit(
+                db, action="user.login_2fa_pending", user_id=user.id,
+                resource="auth", details="Login succeeded, awaiting 2FA verification",
+                ip_address=_get_client_ip(request),
+            )
+            return {
+                "requires_2fa": True,
+                "pending_token": pending_token,
+                "message": "2FA verification required. Send TOTP code to /auth/2fa/login.",
+            }
+
+    # No 2FA or Trusted Device — issue full tokens
     token_data = {"sub": str(user.id), "email": user.email, "role": user.role.value if isinstance(user.role, UserRole) else user.role}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
@@ -156,6 +169,7 @@ async def login(
 async def login_2fa(
     request_body: TwoFactorLoginRequest,
     request: Request,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Complete login by verifying TOTP code with a pending 2FA token."""
@@ -185,6 +199,18 @@ async def login_2fa(
     token_data = {"sub": str(user.id), "email": user.email, "role": user.role.value if isinstance(user.role, UserRole) else user.role}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
+
+    if request_body.trust_device:
+        # Issue a trusted device token cookie (7 days)
+        trusted_token = create_trusted_device_token(str(user.id))
+        response.set_cookie(
+            key="trusted_device_token",
+            value=trusted_token,
+            max_age=60 * 60 * 24 * 7,  # 7 days
+            httponly=True,
+            samesite="lax",
+            secure=False, # Set True in prod
+        )
 
     await record_audit(
         db, action="user.login_2fa_complete", user_id=user.id,

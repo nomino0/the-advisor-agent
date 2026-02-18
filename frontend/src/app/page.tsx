@@ -1,9 +1,29 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ThemeToggle } from "@/components/ThemeProvider";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function HomePage() {
+  const { user, loading } = useAuth({ requireAuth: false });
+  const router = useRouter();
+
+  useEffect(() => {
+    if (user && !loading) {
+      router.replace("/dashboard");
+    }
+  }, [user, loading, router]);
+
+  if (loading) {
+    return null; // or a spinner
+  }
+
+  // If user is logged in, we are redirecting, so we don't need to worry about the UI much.
+  // But strictly speaking, if not redirecting fast enough, we might want to hide login buttons.
+  // However, redirect happens fast.
+  
   return (
     <div className="min-h-screen">
       {/* Navigation */}

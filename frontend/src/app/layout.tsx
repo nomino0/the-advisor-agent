@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Toaster } from "react-hot-toast";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
@@ -25,6 +26,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
         <ThemeProvider>{children}</ThemeProvider>
+        <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
       </body>
     </html>
   );

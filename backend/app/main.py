@@ -1,15 +1,18 @@
 """CloudWise AI — FastAPI application entry point."""
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 import structlog
 import logging
 
 from app.config import settings
+from app.core.rate_limit import limiter
 from app.db.session import engine, Base
 from app.api.v1 import auth, analysis, health, user, admin, payments, subscriptions, github_oauth, llm_config
 
@@ -21,8 +24,7 @@ logging.basicConfig(
 file_logger = logging.getLogger("cloudwise")
 logger = structlog.get_logger()
 
-# Rate limiter (in-memory for dev; swap to Redis for prod)
-limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+# Rate limiter is now imported from app.core.rate_limit to ensure single instance
 
 
 # ── Security Headers Middleware (pure ASGI — avoids BaseHTTPMiddleware issues with CORS) ─
@@ -88,6 +90,13 @@ app = FastAPI(
 
 # Security headers middleware  (added first → runs INNER)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SlowAPIMiddleware)
+
+if settings.app_env.lower() == "production":
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.backend_cors_origins + ["api.cloudwise.ai", "localhost"])
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware  (added last → runs OUTER, so preflight OPTIONS are handled
 # before any other middleware or routing logic touches the request)
