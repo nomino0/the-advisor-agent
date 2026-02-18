@@ -257,6 +257,13 @@ async def download_github_tarball(
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=120) as client:
         resp = await client.get(url, headers=headers)
+
+        # Fallback: If token is invalid (401), retry without it for public repos
+        if resp.status_code == 401 and access_token:
+            logger.warning("GitHub API 401 with token for %s/%s. Retrying anonymously.", owner, repo)
+            headers.pop("Authorization", None)
+            resp = await client.get(url, headers=headers)
+
         if resp.status_code == 404:
             shutil.rmtree(tmpdir, ignore_errors=True)
             raise RuntimeError(f"Repository {owner}/{repo} not found or not accessible")

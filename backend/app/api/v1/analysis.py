@@ -856,13 +856,13 @@ async def _get_user_analysis(
 
 def _to_summary(a: Analysis) -> AnalysisSummary:
     return AnalysisSummary(
-        id=a.id,
+        id=str(a.id),
         project_name=a.project_name,
-        status=a.status.value if isinstance(a.status, AnalysisStatus) else a.status,
-        source_type=a.source_type.value if isinstance(a.source_type, SourceType) else a.source_type,
+        status=a.status.value if isinstance(a.status, AnalysisStatus) else str(a.status),
+        source_type=a.source_type.value if isinstance(a.source_type, SourceType) else str(a.source_type),
         total_files=a.total_files,
         total_lines=a.total_lines,
-        languages=a.languages,
+        languages=a.languages or {},
         overall_score=a.overall_score,
         is_unlocked=a.is_unlocked,
         created_at=a.created_at,

@@ -1,5 +1,3 @@
-import os
-from app.services.code_scanner import SKIP_DIRS, EXT_LANG_MAP
 
 def extract_context_for_llm(directory: str, max_chars: int = 50000) -> str:
     """Read key files to build LLM context."""
