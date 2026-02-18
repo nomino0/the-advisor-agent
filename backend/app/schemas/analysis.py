@@ -155,9 +155,9 @@ class GrantGenerateResponse(BaseModel):
     status: str
 
 class GrantActivateRequest(BaseModel):
-    """Request sent by the CLI command to register project path."""
+    """Legacy JSON schema — kept for compat; real activation uses multipart."""
     token: str
-    project_path: str
+    project_name: Optional[str] = None
     os_info: Optional[str] = None
 
 class GrantActivateResponse(BaseModel):

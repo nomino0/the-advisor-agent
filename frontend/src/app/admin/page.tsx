@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Trash2, Edit, Plus, Upload, Play, RefreshCw, Key, FileText, Settings, Database, Server } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeProvider";
 
 interface Stats {
   total_users: number;
@@ -194,22 +195,23 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Nav */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-3 sticky top-0 z-10">
+      <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-slate-500 hover:text-slate-900 group flex items-center gap-1">
+            <Link href="/dashboard" className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white group flex items-center gap-1">
               <span className="group-hover:-translate-x-1 transition-transform">←</span> Dashboard
             </Link>
-            <div className="h-6 w-px bg-slate-200" />
+            <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-sm">
                 <span className="text-white font-bold text-sm">CW</span>
               </div>
-              <span className="font-bold text-slate-900">Admin Panel</span>
+              <span className="font-bold text-slate-900 dark:text-white">Admin Panel</span>
             </div>
           </div>
+          <ThemeToggle />
         </div>
       </nav>
 
@@ -230,7 +232,7 @@ export default function AdminPage() {
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 tab === item.id
                   ? "bg-blue-600 text-white shadow-md shadow-blue-600/20"
-                  : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
+                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700"
               }`}
             >
               <item.icon size={16} />
@@ -244,7 +246,7 @@ export default function AdminPage() {
           
           {/* Overview Tab */}
           {tab === "overview" && stats && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in duration-500">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in fade-in duration-500">
               <StatCard label="Total Users" value={stats.total_users} icon={UserIcon} color="blue" />
               <StatCard label="Total Analyses" value={stats.total_analyses} icon={FileText} color="purple" />
               <StatCard label="Avg. Score" value={stats.average_score?.toFixed(1) || "N/A"} icon={RefreshCw} color="green" />
@@ -253,9 +255,9 @@ export default function AdminPage() {
 
           {/* LLM Providers Tab */}
           {tab === "llm" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in slide-in-from-bottom-2 duration-300">
-              <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in slide-in-from-bottom-2 duration-300">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
+                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                   <Server className="text-blue-600" size={20} />
                   LLM Providers
                 </h3>
@@ -272,16 +274,16 @@ export default function AdminPage() {
               </div>
               
               {showProviderForm && (
-                <div className="p-6 border-b border-slate-100 bg-slate-50">
+                <div className="p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40">
                   <div className="grid grid-cols-2 gap-4 max-w-2xl">
                     <input 
                       placeholder="Provider Name (e.g. Groq)" 
-                      className="border p-2 rounded-lg text-sm"
+                      className="border dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
                       value={providerForm.name}
                       onChange={e => setProviderForm({...providerForm, name: e.target.value})}
                     />
                     <select 
-                      className="border p-2 rounded-lg text-sm"
+                      className="border dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                       value={providerForm.provider_type}
                       onChange={e => setProviderForm({...providerForm, provider_type: e.target.value})}
                     >
@@ -291,45 +293,45 @@ export default function AdminPage() {
                     </select>
                     <input 
                       placeholder="Base URL" 
-                      className="border p-2 rounded-lg text-sm"
+                      className="border dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
                       value={providerForm.base_url}
                       onChange={e => setProviderForm({...providerForm, base_url: e.target.value})}
                     />
                     <input 
                       placeholder="API Key" 
                       type="password"
-                      className="border p-2 rounded-lg text-sm"
+                      className="border dark:border-slate-700 p-2 rounded-lg text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
                       value={providerForm.api_key}
                       onChange={e => setProviderForm({...providerForm, api_key: e.target.value})}
                     />
                     <input 
                       placeholder="Models (comma separated)" 
-                      className="border p-2 rounded-lg text-sm col-span-2"
+                      className="border dark:border-slate-700 p-2 rounded-lg text-sm col-span-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500"
                       value={providerForm.models}
                       onChange={e => setProviderForm({...providerForm, models: e.target.value})}
                     />
                     <div className="col-span-2 flex gap-2 justify-end mt-2">
-                       <button onClick={() => setShowProviderForm(false)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg">Cancel</button>
+                       <button onClick={() => setShowProviderForm(false)} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg">Cancel</button>
                        <button onClick={handleSaveProvider} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
                     </div>
                   </div>
                 </div>
               )}
 
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {providers.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 text-sm">No providers configured yet.</div>
+                  <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">No providers configured yet.</div>
                 ) : (
                   providers.map(p => (
-                    <div key={p.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center group">
+                    <div key={p.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors flex justify-between items-center group">
                       <div className="flex items-start gap-3">
-                         <div className={`mt-1 w-2 h-2 rounded-full ${p.is_active ? 'bg-green-500' : 'bg-slate-300'}`} />
+                         <div className={`mt-1 w-2 h-2 rounded-full ${p.is_active ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`} />
                          <div>
-                           <div className="font-semibold text-slate-900">{p.name}</div>
-                           <div className="text-xs text-slate-500 font-mono mt-0.5">{p.base_url || "Default URL"}</div>
+                           <div className="font-semibold text-slate-900 dark:text-white">{p.name}</div>
+                           <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">{p.base_url || "Default URL"}</div>
                            <div className="flex gap-1 mt-2">
                               {p.models.map(m => (
-                                <span key={m} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-medium border border-blue-100">{m}</span>
+                                <span key={m} className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-[10px] font-medium border border-blue-100 dark:border-blue-800">{m}</span>
                               ))}
                            </div>
                          </div>
@@ -368,9 +370,9 @@ export default function AdminPage() {
 
           {/* RAG Documents Tab */}
           {tab === "rag" && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in slide-in-from-bottom-2 duration-300">
-               <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden animate-in slide-in-from-bottom-2 duration-300">
+               <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
+                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                   <Database className="text-purple-600" size={20} />
                   Knowledge Base
                 </h3>
@@ -384,26 +386,26 @@ export default function AdminPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50/50">
-                      <th className="px-6 py-3 text-left font-semibold text-slate-600">Filename</th>
-                      <th className="px-6 py-3 text-left font-semibold text-slate-600">Type</th>
-                      <th className="px-6 py-3 text-left font-semibold text-slate-600">Status</th>
-                      <th className="px-6 py-3 text-left font-semibold text-slate-600">Chunks</th>
-                      <th className="px-6 py-3 text-right font-semibold text-slate-600">Actions</th>
+                    <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+                      <th className="px-6 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Filename</th>
+                      <th className="px-6 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Type</th>
+                      <th className="px-6 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Status</th>
+                      <th className="px-6 py-3 text-left font-semibold text-slate-600 dark:text-slate-300">Chunks</th>
+                      <th className="px-6 py-3 text-right font-semibold text-slate-600 dark:text-slate-300">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {documents.length === 0 ? (
-                      <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500">No documents uploaded.</td></tr>
+                      <tr><td colSpan={5} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400">No documents uploaded.</td></tr>
                     ) : (
                       documents.map(doc => (
-                        <tr key={doc.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-3 font-medium text-slate-900">{doc.filename}</td>
-                          <td className="px-6 py-3 text-slate-500 uppercase text-xs">{doc.file_type}</td>
+                        <tr key={doc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">{doc.filename}</td>
+                          <td className="px-6 py-3 text-slate-500 dark:text-slate-400 uppercase text-xs">{doc.file_type}</td>
                           <td className="px-6 py-3">
                             <DocumentStatusBadge status={doc.status} />
                           </td>
-                          <td className="px-6 py-3 text-slate-500">{doc.chunk_count}</td>
+                          <td className="px-6 py-3 text-slate-500 dark:text-slate-400">{doc.chunk_count}</td>
                           <td className="px-6 py-3 text-right">
                              {doc.status !== 'indexed' && (
                                <button 
@@ -436,15 +438,15 @@ export default function AdminPage() {
 // Components
 function StatCard({ label, value, icon: Icon, color }: any) {
   const colors = {
-    blue: "bg-blue-100 text-blue-600 border-blue-200",
-    purple: "bg-purple-100 text-purple-600 border-purple-200",
-    green: "bg-green-100 text-green-600 border-green-200"
+    blue: "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800",
+    purple: "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800",
+    green: "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800"
   };
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-6 flex items-center justify-between shadow-sm">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex items-center justify-between shadow-sm">
       <div>
-        <div className="text-sm font-medium text-slate-500 mb-1">{label}</div>
-        <div className="text-3xl font-bold text-slate-900">{value}</div>
+        <div className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">{label}</div>
+        <div className="text-3xl font-bold text-slate-900 dark:text-white">{value}</div>
       </div>
       <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${colors[color] || colors.blue}`}>
         <Icon size={24} />
@@ -455,10 +457,10 @@ function StatCard({ label, value, icon: Icon, color }: any) {
 
 function DocumentStatusBadge({ status }: { status: string }) {
   const styles = {
-    indexed: "bg-green-100 text-green-700 border-green-200",
-    pending: "bg-yellow-100 text-yellow-700 border-yellow-200",
-    failed: "bg-red-100 text-red-700 border-red-200",
-    uploaded: "bg-blue-100 text-blue-700 border-blue-200"
+    indexed: "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800",
+    pending: "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800",
+    failed: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-800",
+    uploaded: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800"
   };
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${styles[status as keyof typeof styles] || styles.uploaded}`}>
@@ -478,26 +480,26 @@ function UserIcon({ size }: { size: number }) {
 
 function UsersTable({ users }: { users: User[] }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/50 text-left">
-              <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Name</th>
-              <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Email</th>
-              <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Role</th>
-              <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Active</th>
-              <th className="px-6 py-3 text-xs font-semibold text-slate-500 uppercase">Joined</th>
+            <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 text-left">
+              <th className="px-6 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Name</th>
+              <th className="px-6 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Email</th>
+              <th className="px-6 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Role</th>
+              <th className="px-6 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Active</th>
+              <th className="px-6 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Joined</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
              {users.map(u => (
-               <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                 <td className="px-6 py-3 text-sm font-medium text-slate-900">{u.full_name}</td>
-                 <td className="px-6 py-3 text-sm text-slate-600">{u.email}</td>
-                 <td className="px-6 py-3"><span className={`text-xs px-2 py-1 rounded-md font-medium ${u.role==='admin'?'bg-purple-100 text-purple-700':'bg-slate-100 text-slate-600'}`}>{u.role}</span></td>
+               <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                 <td className="px-6 py-3 text-sm font-medium text-slate-900 dark:text-white">{u.full_name}</td>
+                 <td className="px-6 py-3 text-sm text-slate-600 dark:text-slate-400">{u.email}</td>
+                 <td className="px-6 py-3"><span className={`text-xs px-2 py-1 rounded-md font-medium ${u.role==='admin'?'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400':'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>{u.role}</span></td>
                  <td className="px-6 py-3"><div className={`w-2.5 h-2.5 rounded-full ${u.is_active?'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]':'bg-red-500'}`} /></td>
-                 <td className="px-6 py-3 text-sm text-slate-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                 <td className="px-6 py-3 text-sm text-slate-500 dark:text-slate-400">{new Date(u.created_at).toLocaleDateString()}</td>
                </tr>
              ))}
           </tbody>
@@ -508,24 +510,24 @@ function UsersTable({ users }: { users: User[] }) {
 }
 
 function LogsList({ logs }: { logs: AuditLog[] }) {
-    if (logs.length === 0) return <div className="bg-white p-8 text-center text-slate-500 rounded-xl border">No logs found.</div>
+    if (logs.length === 0) return <div className="bg-white dark:bg-slate-900 p-8 text-center text-slate-500 dark:text-slate-400 rounded-xl border dark:border-slate-800">No logs found.</div>
     return (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="divide-y divide-slate-100">
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
                 {logs.map(l => (
-                    <div key={l.id} className="px-6 py-3 hover:bg-slate-50 transition-colors flex justify-between items-center">
+                    <div key={l.id} className="px-6 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors flex justify-between items-center">
                         <div className="flex items-center gap-3">
-                           <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                           <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400">
                              <FileText size={14} />
                            </div>
                            <div>
-                             <p className="text-sm font-medium text-slate-900">
-                               {l.action} <span className="text-slate-400 font-normal">on</span> {l.resource}
+                             <p className="text-sm font-medium text-slate-900 dark:text-white">
+                               {l.action} <span className="text-slate-400 dark:text-slate-500 font-normal">on</span> {l.resource}
                              </p>
-                             {l.details && <p className="text-xs text-slate-500 mt-0.5">{l.details}</p>}
+                             {l.details && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{l.details}</p>}
                            </div>
                         </div>
-                        <div className="text-xs text-slate-400 font-mono">
+                        <div className="text-xs text-slate-400 dark:text-slate-500 font-mono">
                             {new Date(l.timestamp).toLocaleString()}
                         </div>
                     </div>

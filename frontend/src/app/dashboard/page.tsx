@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/ThemeProvider";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Analysis {
   id: string;
@@ -61,42 +62,29 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const { user, token, isAdmin, loading: authLoading, logout } = useAuth({ requireAuth: true });
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const [analysesLoading, setAnalysesLoading] = useState(true);
 
   const fetchAnalyses = useCallback(async () => {
     if (!token) return;
     try {
       const data = await api("/api/v1/analysis/history", { token });
-      setAnalyses(data.analyses);
+      setAnalyses(data.analyses ?? []);
     } catch {
       // ignore
     }
   }, [token]);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser || !token) {
-      router.push("/login");
-      return;
-    }
-    setUser(JSON.parse(storedUser));
-    fetchAnalyses().finally(() => setLoading(false));
-
+    if (authLoading || !token) return;
+    fetchAnalyses().finally(() => setAnalysesLoading(false));
     const interval = setInterval(fetchAnalyses, 5000);
     return () => clearInterval(interval);
-  }, [router, token, fetchAnalyses]);
+  }, [authLoading, token, fetchAnalyses]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user");
-    router.push("/login");
-  };
+  const loading = authLoading || analysesLoading;
+  const handleLogout = logout;
 
   if (loading) {
     return (
@@ -128,7 +116,7 @@ export default function DashboardPage() {
             >
               Settings
             </Link>
-            {user?.role === "admin" && (
+            {isAdmin && (
               <Link
                 href="/admin"
                 className="text-sm text-blue-600 dark:text-blue-400 font-medium hover:underline"

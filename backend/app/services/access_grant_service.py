@@ -44,6 +44,7 @@ class AccessGrant:
     os_info: Optional[str] = None
     client_ip: Optional[str] = None
     activated_at: Optional[datetime] = None
+    scan_result: Optional[dict] = None  # Stored after ZIP upload during activation
 
     def __post_init__(self):
         if self.expires_at is None:
@@ -150,11 +151,12 @@ class AccessGrantStore:
     def activate(
         self,
         token: str,
-        project_path: str,
+        project_name: str,
+        scan_result: dict,
         os_info: Optional[str] = None,
         client_ip: Optional[str] = None,
     ) -> Optional[AccessGrant]:
-        """Activate a pending grant by registering the project path."""
+        """Activate a pending grant by storing the pre-scanned result."""
         with self._lock:
             grant = self._grants.get(token)
             if not grant:
@@ -165,19 +167,16 @@ class AccessGrantStore:
                 grant.status = "expired"
                 return None
 
-            # Validate path exists
-            if not os.path.isdir(project_path):
-                raise FileNotFoundError(f"Directory not found: {project_path}")
-
-            grant.project_path = os.path.abspath(project_path)
-            grant.project_name = os.path.basename(grant.project_path)
+            grant.project_path = project_name  # store name as reference
+            grant.project_name = project_name
+            grant.scan_result = scan_result
             grant.os_info = os_info or platform.system()
             grant.client_ip = client_ip
             grant.status = "active"
             grant.activated_at = datetime.now(timezone.utc)
 
             logger.info(
-                f"Grant {token[:8]}... activated: {grant.project_path} "
+                f"Grant {token[:8]}... activated: project='{project_name}' "
                 f"(OS: {grant.os_info}, IP: {grant.client_ip})"
             )
             return grant
@@ -219,63 +218,71 @@ def generate_cli_command(
     backend_url: str,
     target_os: str = "windows",
 ) -> dict:
-    """Generate OS-specific CLI command for granting access.
+    """Generate OS-specific CLI command that ZIPs the project and POSTs it.
 
-    Returns a dict with 'command', 'os', and 'instructions'.
+    The command prompts for the project folder, compresses it to a temporary
+    ZIP, uploads it to /grant/activate as multipart form-data, then deletes
+    the temp ZIP.  No path string is stored on the server — the actual files
+    are transmitted and scanned immediately (zero-persistence).
     """
     endpoint = f"{backend_url}/api/v1/analysis/grant/activate"
     target_os = target_os.lower().strip()
 
     if target_os == "windows":
         command = (
-            f'powershell -NoProfile -Command "'
-            f"$path = Read-Host 'Enter project path'; "
-            f"Invoke-RestMethod -Uri '{endpoint}' "
-            f"-Method POST "
-            f"-ContentType 'application/json' "
-            f"-Body (ConvertTo-Json @{{token='{token}'; project_path=$path; os_info='windows'}}) "
-            f'| ConvertTo-Json"'
+            '$path = Read-Host "Enter your project folder path"; '
+            '$zip = [System.IO.Path]::GetTempFileName() + ".zip"; '
+            'Compress-Archive -Path "$path\\*" -DestinationPath $zip -Force; '
+            '$name = Split-Path $path -Leaf; '
+            f'curl.exe -s -X POST "{endpoint}" '
+            f'-F "token={token}" '
+            '-F "project_name=$name" '
+            '-F "os_info=windows" '
+            '-F "file=@$zip;type=application/zip"; '
+            'Remove-Item $zip -Force'
         )
-        short_command = (
-            f'$p = Read-Host "Project path"; '
-            f"irm '{endpoint}' -Method POST "
-            f"-ContentType 'application/json' "
-            f"-Body ('{{"
-            f'"token":"{token}",'
-            f'"project_path":"\'$p\'",'
-            f'"os_info":"windows"'
-            f"}}') | ConvertTo-Json"
-        )
+        short_command = command
         instructions = (
-            "Open PowerShell, paste the command, and enter your project directory path when prompted."
+            "Open PowerShell, paste the command, and enter your project folder path when prompted. "
+            "The folder will be zipped and sent securely to CloudWise."
         )
 
     elif target_os == "macos":
         command = (
-            f'read -p "Enter project path: " PROJECT_PATH && '
+            'read -rp "Enter your project folder path: " PROJECT_PATH && '
+            'ZIP=$(mktemp /tmp/cw_XXXXXX.zip) && '
+            '(cd "$PROJECT_PATH" && zip -r "$ZIP" . '
+            '-x "*.git*" -x "node_modules/*" -x "__pycache__/*" -x ".venv/*" > /dev/null) && '
+            'NAME=$(basename "$PROJECT_PATH") && '
             f'curl -s -X POST "{endpoint}" '
-            f'-H "Content-Type: application/json" '
-            f'-d \'{{"token": "{token}", '
-            f'"project_path": "\'$PROJECT_PATH\'", '
-            f'"os_info": "macos"}}\''
+            f'-F "token={token}" '
+            '-F "project_name=$NAME" '
+            '-F "os_info=macos" '
+            '-F "file=@$ZIP;type=application/zip" && '
+            'rm -f "$ZIP"'
         )
         short_command = command
         instructions = (
-            "Open Terminal, paste the command, and enter your project directory path when prompted."
+            "Open Terminal, paste the command, and enter your project folder path when prompted."
         )
 
     else:  # linux
         command = (
-            f'read -p "Enter project path: " PROJECT_PATH && '
+            'read -rp "Enter your project folder path: " PROJECT_PATH && '
+            'ZIP=$(mktemp /tmp/cw_XXXXXX.zip) && '
+            '(cd "$PROJECT_PATH" && zip -r "$ZIP" . '
+            '-x "*.git*" -x "node_modules/*" -x "__pycache__/*" -x ".venv/*" > /dev/null) && '
+            'NAME=$(basename "$PROJECT_PATH") && '
             f'curl -s -X POST "{endpoint}" '
-            f'-H "Content-Type: application/json" '
-            f'-d \'{{"token": "{token}", '
-            f'"project_path": "\'$PROJECT_PATH\'", '
-            f'"os_info": "linux"}}\''
+            f'-F "token={token}" '
+            '-F "project_name=$NAME" '
+            '-F "os_info=linux" '
+            '-F "file=@$ZIP;type=application/zip" && '
+            'rm -f "$ZIP"'
         )
         short_command = command
         instructions = (
-            "Open a terminal, paste the command, and enter your project directory path when prompted."
+            "Open a terminal, paste the command, and enter your project folder path when prompted."
         )
 
     return {

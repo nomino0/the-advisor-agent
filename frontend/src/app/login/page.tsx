@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { ThemeToggle } from "@/components/ThemeProvider";
+import { saveAuth, getToken, getUser } from "@/hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
+
+  // If already logged in, redirect immediately
+  useEffect(() => {
+    const token = getToken();
+    const user = getUser();
+    if (token && user) {
+      router.replace(user.role === "admin" ? "/admin" : "/dashboard");
+    }
+  }, [router]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -33,10 +43,8 @@ export default function LoginPage() {
         setRequires2FA(true);
         setPendingToken(data.pending_token);
       } else {
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("refresh_token", data.refresh_token);
-        localStorage.setItem("user", JSON.stringify(data.user));
-        router.push("/dashboard");
+        saveAuth(data);
+        router.push(data.user?.role === "admin" ? "/admin" : "/dashboard");
       }
     } catch (err: any) {
       setError(err.message || "Login failed");
@@ -56,10 +64,8 @@ export default function LoginPage() {
         body: { pending_token: pendingToken, totp_code: totpCode },
       });
 
-      localStorage.setItem("access_token", data.access_token);
-      localStorage.setItem("refresh_token", data.refresh_token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      router.push("/dashboard");
+      saveAuth(data);
+      router.push(data.user?.role === "admin" ? "/admin" : "/dashboard");
     } catch (err: any) {
       setError(err.message || "Invalid 2FA code");
       setTotpCode("");

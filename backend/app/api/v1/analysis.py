@@ -14,6 +14,7 @@ import tempfile
 import os
 import logging
 from io import BytesIO
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -194,16 +195,22 @@ async def generate_grant_token(
 
 @router.post("/grant/activate", response_model=GrantActivateResponse)
 async def activate_grant(
-    body: GrantActivateRequest,
     request: Request,
+    token: str = Form(...),
+    project_name: str = Form(...),
+    os_info: Optional[str] = Form(default=None),
+    file: UploadFile = File(...),
 ):
-    """Activate an access grant by registering the project path.
+    """Activate an access grant by uploading a ZIP of the project.
 
-    This endpoint is called by the CLI command that the user runs on their
-    machine.  It does NOT require authentication — the token itself is the
-    credential.
+    Called by the CLI command the user runs on their machine.  The project
+    is zipped locally, uploaded here, scanned immediately, and the scan
+    result is stored on the grant.  No files are persisted — everything is
+    processed in-memory / ephemeral tmpdir.
+
+    No auth token required — the grant token is the credential.
     """
-    grant = grant_store.get(body.token)
+    grant = grant_store.get(token)
     if not grant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -224,18 +231,52 @@ async def activate_grant(
 
     client_ip = _get_client_ip(request)
 
+    # Read uploaded ZIP into memory and scan it
     try:
-        activated = grant_store.activate(
-            token=body.token,
-            project_path=body.project_path,
-            os_info=body.os_info,
-            client_ip=client_ip,
-        )
-    except FileNotFoundError as e:
+        zip_bytes = await file.read()
+        zip_buffer = BytesIO(zip_bytes)
+
+        if not zipfile.is_zipfile(zip_buffer):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is not a valid ZIP archive.",
+            )
+        zip_buffer.seek(0)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(zip_buffer, "r") as zf:
+                zf.extractall(tmpdir)
+
+            scan_data = scan_directory(tmpdir)
+            llm_ctx = extract_context_for_llm(tmpdir, scan_data)
+            test_fw = detect_test_framework(tmpdir)
+
+            scan_result = {
+                "total_files": scan_data.get("total_files", 0),
+                "total_lines": scan_data.get("total_lines", 0),
+                "languages": scan_data.get("languages", {}),
+                "findings": scan_data.get("findings", []),
+                "llm_context": llm_ctx,
+                "test_framework": test_fw,
+                "project_name": project_name,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to scan uploaded project for grant {token[:8]}: {e}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Failed to process uploaded project: {str(e)}",
         )
+
+    activated = grant_store.activate(
+        token=token,
+        project_name=project_name,
+        scan_result=scan_result,
+        os_info=os_info,
+        client_ip=client_ip,
+    )
 
     if not activated:
         raise HTTPException(
@@ -245,9 +286,9 @@ async def activate_grant(
 
     return GrantActivateResponse(
         status="active",
-        message=f"Access granted. CloudWise can now read '{activated.project_name}' in read-only mode.",
+        message=f"Access granted. CloudWise has scanned '{activated.project_name}' in read-only mode.",
         project_name=activated.project_name,
-        project_path=activated.project_path,
+        project_path=activated.project_name,
         remaining_seconds=activated.remaining_seconds,
     )
 
@@ -296,8 +337,9 @@ async def scan_granted_project(
 ):
     """Start analysis on a project that has been granted via the token system.
 
-    Requires the grant to be in 'active' status.  After starting the scan,
-    the grant is consumed (single-use).
+    The project was already scanned during activation (ZIP upload).  This
+    endpoint simply creates the Analysis record and launches the pipeline
+    using the pre-stored scan_result — no local filesystem access needed.
     """
     grant = grant_store.get(token)
     if not grant:
@@ -315,30 +357,29 @@ async def scan_granted_project(
     if grant.is_expired:
         raise HTTPException(status_code=410, detail="Grant has expired.")
 
-    project_path = grant.project_path
-    if not project_path or not os.path.isdir(project_path):
-        raise HTTPException(status_code=400, detail="Project path is no longer accessible.")
+    scan_result = grant.scan_result
+    if not scan_result:
+        raise HTTPException(
+            status_code=400,
+            detail="No scan data found for this grant. Please re-run the CLI command.",
+        )
 
-    # Run Planner
-    try:
-        planner = PlannerService(project_path)
-        plan = planner.create_execution_plan()
-    except Exception as e:
-        logger.error(f"Planner failed for grant {token[:8]}: {e}")
-        raise HTTPException(status_code=500, detail=f"Planner Error: {str(e)}")
+    project_name = grant.project_name or scan_result.get("project_name", "unknown-project")
+    languages: dict = scan_result.get("languages", {})
+    primary_language = max(languages, key=languages.get) if languages else "unknown"
 
-    # Create Analysis Record
+    # Create Analysis record
     analysis = Analysis(
         id=str(uuid.uuid4()),
         user_id=current_user.id,
-        project_name=grant.project_name or os.path.basename(project_path),
+        project_name=project_name,
         source_type=SourceType.UPLOAD,
-        repo_url=f"file://{project_path}",
+        repo_url=f"grant://{token[:8]}",
         status=AnalysisStatus.PENDING,
         commit_hash="granted-access",
-        language=plan.stack.split(" ")[0].lower(),
-        framework=plan.stack,
-        score=float(plan.security_score),
+        language=primary_language.lower(),
+        framework=primary_language,
+        score=0.0,
     )
 
     db.add(analysis)
@@ -348,12 +389,11 @@ async def scan_granted_project(
     # Consume grant (single-use)
     grant_store.consume(token)
 
-    # Launch analysis pipeline
+    # Launch analysis pipeline with stored scan data
     background_tasks.add_task(
         run_analysis_pipeline,
         analysis.id,
-        None,
-        plan.tasks,
+        scan_result,
     )
 
     return AnalysisSummary(
@@ -364,7 +404,7 @@ async def scan_granted_project(
         score=analysis.score,
         grade=_score_to_grade(analysis.score),
         created_at=analysis.created_at,
-        findings_count=0,
+        findings_count=len(scan_result.get("findings", [])),
         language=analysis.language,
     )
 

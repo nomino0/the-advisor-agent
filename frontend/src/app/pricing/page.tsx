@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { ThemeToggle } from "@/components/ThemeProvider";
 
 interface Plan {
   name: string;
@@ -34,20 +35,20 @@ export default function PricingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center">
         <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Nav */}
-      <nav className="bg-white border-b border-slate-200 px-6 py-3">
+      <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link
             href="/dashboard"
-            className="text-slate-500 hover:text-slate-900 text-sm"
+            className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm"
           >
             &larr; Back
           </Link>
@@ -55,18 +56,18 @@ export default function PricingPage() {
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">CW</span>
             </div>
-            <span className="font-bold text-slate-900">Pricing Plans</span>
+            <span className="font-bold text-slate-900 dark:text-white">Pricing Plans</span>
           </div>
-          <div className="w-12" />
+          <ThemeToggle />
         </div>
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-16">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-slate-900 mb-3">
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
             Choose Your Plan
           </h2>
-          <p className="text-slate-500 max-w-xl mx-auto">
+          <p className="text-slate-500 dark:text-slate-400 max-w-xl mx-auto">
             Pay per analysis or subscribe for a monthly quota. Enterprise plans
             include custom SLAs and dedicated support.
           </p>
@@ -76,7 +77,7 @@ export default function PricingPage() {
           {Object.entries(plans).map(([key, plan]) => (
             <div
               key={key}
-              className={`rounded-2xl border bg-white p-6 flex flex-col ${
+              className={`rounded-2xl border bg-white dark:bg-slate-900 p-6 flex flex-col ${
                 highlight[key] || "border-slate-200"
               }`}
             >
@@ -85,27 +86,27 @@ export default function PricingPage() {
                   Most Popular
                 </div>
               )}
-              <h3 className="text-lg font-bold text-slate-900 mb-1">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">
                 {plan.name}
               </h3>
-              <div className="text-3xl font-extrabold text-slate-900 mb-1">
+              <div className="text-3xl font-extrabold text-slate-900 dark:text-white mb-1">
                 {plan.price_cents === 0 && key !== "enterprise"
                   ? "$0"
                   : key === "enterprise"
                   ? "Custom"
                   : `$${(plan.price_cents / 100).toFixed(0)}`}
                 {plan.price_cents > 0 && key !== "enterprise" && (
-                  <span className="text-sm font-normal text-slate-400">
+                  <span className="text-sm font-normal text-slate-400 dark:text-slate-500">
                     /mo
                   </span>
                 )}
               </div>
-              <p className="text-sm text-slate-500 mb-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
                 {plan.analyses_limit >= 999999
                   ? "Unlimited analyses"
                   : `${plan.analyses_limit} analyses/month`}
               </p>
-              <ul className="space-y-2 text-sm text-slate-600 flex-1 mb-6">
+              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400 flex-1 mb-6">
                 {plan.features.map((f, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <span className="text-green-600 mt-0.5">&#10003;</span>
@@ -127,7 +128,7 @@ export default function PricingPage() {
                 className={`w-full py-2.5 rounded-lg font-semibold transition ${
                   key === "pro"
                     ? "bg-blue-600 hover:bg-blue-700 text-white"
-                    : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300"
                 }`}
               >
                 {key === "free"
@@ -140,7 +141,7 @@ export default function PricingPage() {
           ))}
         </div>
 
-        <div className="mt-12 text-center text-sm text-slate-500">
+        <div className="mt-12 text-center text-sm text-slate-500 dark:text-slate-400">
           All plans include peer-to-peer code analysis &mdash; your code never
           leaves your machine.
         </div>
