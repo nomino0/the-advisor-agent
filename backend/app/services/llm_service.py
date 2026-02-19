@@ -28,18 +28,25 @@ class LLMService:
         )
 
     async def generate_completion(self, prompt: str, system_prompt: str = "You are a helpful assistant.", provider_name: str = None, model: str = None) -> str:
-        """Generate completion using Groq Kimi model."""
-        try:
-            response = self.client.chat.completions.create(
+        """Generate completion using Groq Kimi model (non-blocking via thread pool)."""
+        import asyncio
+        import functools
+
+        def _sync_call():
+            return self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": prompt},
                 ],
                 temperature=0.6,
                 max_completion_tokens=4096,
-                top_p=1
+                top_p=1,
             )
+
+        try:
+            # Run blocking Groq SDK call in a thread pool to avoid blocking the event loop
+            response = await asyncio.to_thread(_sync_call)
             return response.choices[0].message.content
         except Exception as e:
             logger.error(f"LLM Call Failed (Groq-Kimi): {str(e)}")

@@ -396,14 +396,14 @@ async def activate_grant(
                 zf.extractall(tmpdir)
 
             scan_data = scan_directory(tmpdir)
-            llm_ctx = extract_context_for_llm(tmpdir, scan_data)
             test_fw = detect_test_framework(tmpdir)
+            scan_data["test_info"] = test_fw
+
+            # Smart context extraction — only the highest-signal files
+            llm_ctx = extract_context_for_llm(tmpdir, scan_data)
 
             scan_result = {
-                "total_files": scan_data.get("total_files", 0),
-                "total_lines": scan_data.get("total_lines", 0),
-                "languages": scan_data.get("languages", {}),
-                "findings": scan_data.get("findings", []),
+                **scan_data,
                 "llm_context": llm_ctx,
                 "test_framework": test_fw,
                 "project_name": project_name,
@@ -685,12 +685,12 @@ async def connect_and_analyze(
         # ── Scan the fetched code ────────────────────────────────────────
         logger.info("Scanning code at %s", code_path)
         scan_result = scan_directory(code_path)
-        
-        # Extract context for LLM (before cleanup)
-        scan_result["llm_context"] = extract_context_for_llm(code_path)
 
         test_info = detect_test_framework(code_path)
         scan_result["test_info"] = test_info
+
+        # Smart context extraction — selective, token-budget-aware (before cleanup)
+        scan_result["llm_context"] = extract_context_for_llm(code_path, scan_result)
 
         logger.info(
             "Scan complete: %d files, %d lines, %d findings",
@@ -805,6 +805,9 @@ async def upload_and_analyze(
             scan_result = scan_directory(extract_dir)
             test_info = detect_test_framework(extract_dir)
             scan_result["test_info"] = test_info
+
+            # Smart context extraction for LLM agents
+            scan_result["llm_context"] = extract_context_for_llm(extract_dir, scan_result)
 
             logger.info(
                 "Upload scan complete: %d files, %d lines, %d findings",
