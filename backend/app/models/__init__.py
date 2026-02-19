@@ -9,3 +9,5 @@ from app.models.subscription import Subscription  # noqa: F401
 from app.models.api_key import ApiKey  # noqa: F401
 from app.models.rag_document import RagDocument  # noqa: F401
 from app.models.llm_provider import LLMProvider  # noqa: F401
+from app.models.analysis_log import AnalysisLog  # noqa: F401
+from app.models.knowledge_base import KnowledgeBaseSource  # noqa: F401

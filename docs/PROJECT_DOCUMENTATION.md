@@ -1095,6 +1095,7 @@ The Agentic RAG (Retrieval-Augmented Generation) system is the knowledge backbon
 | **Best Practices** | Language-specific guidelines, framework docs, design patterns, anti-patterns | Monthly | Community sources, official guides |
 | **Deployment Templates** | IaC templates (Terraform, Pulumi, CloudFormation), Dockerfiles, CI/CD configs | On-demand (admin curated) | Admin uploads |
 | **Pricing Data** | Current cloud pricing for compute, storage, networking, managed services | Daily | Cloud provider pricing APIs |
+| **Agent Instructions** | Custom instructions for specific agents (e.g., specific security policies) | On-Demand | Admin Panel |
 
 ### 9.3 RAG Pipeline
 
@@ -1123,8 +1124,16 @@ The Agentic RAG (Retrieval-Augmented Generation) system is the knowledge backbon
 
 ### 9.4 Document Ingestion Pipeline (Admin-Managed)
 
+**Updated Feature (v1.1): Knowledge Base Crawler**
+The Admin Panel now includes a web crawler that can ingest content directly from URLs.
+1. Admin enters a URL (e.g., a new AWS service page or ISO standard).
+2. `CrawlerService` fetches the HTML and cleans it using `BeautifulSoup`.
+3. The content is summarized by an LLM into a dense "Knowledge Context".
+4. This summaries context is stored in `KnowledgeBaseSource.processed_content`.
+5. Agents automatically receive this context when relevant to their role.
+
 ```
-Admin uploads document (PDF, MD, HTML, TXT)
+Admin uploads document (PDF, MD, HTML, TXT) OR Provides URL
            │
            ▼
 ┌──────────────────────┐
@@ -1132,22 +1141,22 @@ Admin uploads document (PDF, MD, HTML, TXT)
 │  • Format detection  │
 │  • Text extraction   │
 │  • Metadata parsing  │
+│  • URL Crawling      │ <--- NEW
 └──────────┬───────────┘
            │
            ▼
 ┌──────────────────────┐
+│  Summarization /     │
 │  Chunking Engine     │
 │  • Semantic chunking │
-│  • Overlap: 100 tok  │
-│  • Max chunk: 512 tok│
+│  • LLM Summarization │ <--- NEW
 └──────────┬───────────┘
            │
            ▼
 ┌──────────────────────┐
-│  Embedding + Index   │
-│  • Generate vectors  │
-│  • Store in VectorDB │
-│  • Update metadata   │
+│  Knowledge Store     │
+│  • Vector DB (RAG)   │
+│  • Agent Context     │
 └──────────────────────┘
 ```
 
@@ -1623,12 +1632,15 @@ Layer 5: AI-Powered Contextual Analysis
 
 ### 15.3 RAG Document Management
 
+**Updated Feature (v1.1): Knowledge Base Crawler**
+The Admin Panel interface now supports adding content via URL. When a URL is added, the backend `CrawlerService` fetches, cleans, and summarizes the content using an LLM to create a dense context for agents.
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │  RAG Knowledge Base Management                               │
 │                                                              │
 │  ┌───────────────────┬─────────┬──────────┬──────────────┐  │
-│  │ Collection        │ Docs    │ Chunks   │ Last Updated │  │
+│  │ Collection        │ Docs    │ Chunks   │ Latst Updated│  │
 │  ├───────────────────┼─────────┼──────────┼──────────────┤  │
 │  │ AWS Documentation │  342    │ 15,230   │ 2026-02-15   │  │
 │  │ GCP Documentation │  287    │ 12,450   │ 2026-02-14   │  │
@@ -1645,7 +1657,36 @@ Layer 5: AI-Powered Contextual Analysis
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### 15.4 Admin Capabilities Summary
+### 15.4 Security & Audit Logs
+
+The Admin Panel includes a comprehensive **Security & Audit System** designed to provide real-time visibility into all platform activities, completely replacing static logging with actionable, live intelligence.
+
+**Key Features:**
+- **Real-time Event Tracking**: Instant logging of all user authentications, API calls, and resource modifications, directly fetched from the `audit_log` database table.
+- **Attack Detection**: Visual indicators for failed login bursts, unauthorized access attempts, and suspicious IP activity, with immediate categorization of "Critical" vs "Info" events.
+- **Historical Data**: Full retention of audit logs (persisted in metadata storage), allowing for deep historical analysis of security incidents.
+- **Export Capabilities**: Built-in **CSV Export** to facilitate external auditing, compliance reporting (SOC2/GDPR), and offline analysis. The export generates a timestamped CSV of all currently visible logs.
+- **Granular Filtering & Status**: Logs are visually color-coded (Red for Errors/Security, Blue for Auth, Gray for Info) to allow rapid scanning by administrators.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│  Security & Audit Logs                         [Export CSV]  │
+│                                                              │
+│  ┌─────────────────────┐ ┌─────────────────────┐             │
+│  │ Failed Logins (24h) │ │ Active Sessions     │             │
+│  │       23 🔴         │ │       12 🟢         │             │
+│  └─────────────────────┘ └─────────────────────┘             │
+│                                                              │
+│  Timestamp        Action           User / IP        Details  │
+│  ──────────────────────────────────────────────────────────  │
+│  2026-02-19 14:23 LOGIN_FAILED     192.168.1.55     Invalid  │
+│  2026-02-19 14:21 USER_REGISTER    new@user.com     Success  │
+│  2026-02-19 14:15 API_KEY_ROTATE   Admin (ID: 2)    GCP Key  │
+│  2026-02-19 14:10 SYSTEM_ERROR     System           Timeout  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 15.5 Admin Capabilities Summary
 
 | Capability | Description |
 |---|---|

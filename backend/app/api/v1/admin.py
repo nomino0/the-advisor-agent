@@ -15,6 +15,7 @@ from app.models.audit_log import AuditLog
 from app.models.api_key import ApiKey
 from app.models.rag_document import RagDocument
 from app.models.payment import Payment
+from app.schemas.rag_document import RagDocumentResponse, RagDocumentUpdate
 from app.services.audit_service import record_audit
 
 router = APIRouter()
@@ -512,7 +513,7 @@ async def revenue_transactions(
     }
 
 
-@router.get("/rag/documents")
+@router.get("/rag/documents", response_model=List[RagDocumentResponse])
 async def list_rag_documents(
     admin: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
@@ -522,10 +523,34 @@ async def list_rag_documents(
     return result.scalars().all()
 
 
-@router.post("/rag/upload")
+@router.put("/rag/{doc_id}", response_model=RagDocumentResponse)
+async def update_rag_document(
+    doc_id: uuid.UUID,
+    doc_in: RagDocumentUpdate,
+    admin: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a RAG document metadata."""
+    result = await db.execute(select(RagDocument).where(RagDocument.id == doc_id))
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    update_data = doc_in.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(doc, field, value)
+        
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
+@router.post("/rag/upload", response_model=RagDocumentResponse)
 async def upload_rag_document(
     file: UploadFile = File(...),
     collection: str = Form("cloud_docs"),
+    description: str = Form(""),
+    target_agent: str = Form("general"),
     db: AsyncSession = Depends(get_db),
     admin: User = Depends(get_admin_user),
 ):
@@ -533,11 +558,14 @@ async def upload_rag_document(
     # Check duplicate
     existing = await db.execute(select(RagDocument).where(RagDocument.title == file.filename))
     if existing.scalar_one_or_none():
+         # In case we want to update existing? For now, 409
          raise HTTPException(status_code=409, detail="Document already exists")
 
     doc = RagDocument(
         collection=collection,
         title=file.filename,
+        description=description,
+        target_agent=target_agent,
         uploaded_by=admin.id,
         chunk_count=0,
         status="pending"

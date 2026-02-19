@@ -1,9 +1,11 @@
 import asyncio
 from sqlalchemy import text
-import structlog
+# import structlog
+import logging
 
 # Simple logger setup for standalone script
-logger = structlog.get_logger()
+# logger = structlog.get_logger()
+logger = logging.getLogger(__name__)
 
 from app.db.session import engine
 
@@ -44,7 +46,41 @@ async def create_table():
                 print("Adding priority column...")
                 await conn.execute(text("ALTER TABLE llm_providers ADD COLUMN priority INTEGER DEFAULT 10;"))
 
+            if 'agent_capability' not in existing_columns:
+                print("Adding agent_capability column...")
+                await asyncio.sleep(0.1) # Let previous ops finish
+                await conn.execute(text("ALTER TABLE llm_providers ADD COLUMN agent_capability JSONB DEFAULT '[\"general\"]'::jsonb;"))
+
         print("Table llm_providers is up to date.")
+        
+        # Seed Groq if table empty
+        async with engine.begin() as conn:
+            result = await conn.execute(text("SELECT count(*) FROM llm_providers"))
+            count = result.scalar()
+            
+            if count == 0:
+                print("Seeding Groq provider from .env...")
+                from app.config import settings
+                key = settings.groq_api_key
+                if key:
+                    await conn.execute(text(f"""
+                        INSERT INTO llm_providers (id, name, provider_type, base_url, api_key, models, priority, is_active, agent_capability)
+                        VALUES (
+                            gen_random_uuid(), 
+                            'Groq', 
+                            'openai', 
+                            'https://api.groq.com/openai/v1', 
+                            '{key}', 
+                            '["llama3-70b-8192", "mixtral-8x7b-32768"]'::jsonb, 
+                            1, 
+                            TRUE, 
+                            '["general", "security", "planner"]'::jsonb
+                        );
+                    """))
+                    print("Seeded Groq provider.")
+                else:
+                    print("No Groq key in settings.")
+
     except Exception as e:
         print(f"Error creating/updating table: {e}")
 

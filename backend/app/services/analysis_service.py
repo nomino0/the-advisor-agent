@@ -86,11 +86,21 @@ async def run_analysis_pipeline(
                 try:
                     if scan_result.get("llm_context"):
                         logger.info("Using LLM to enhance analysis report...")
-                        report_data = await _generate_llm_enhanced_report(scan_result, analysis.project_name)
+                        report_data = await _generate_llm_enhanced_report(scan_result, analysis.project_name, str(analysis.id), db)
                     else:
                          report_data = _generate_real_report(scan_result, analysis.project_name)
                 except Exception as e:
                     logger.error(f"LLM analysis failed, falling back to static analysis: {str(e)}")
+                    # Log failure to DB for user visibility
+                    from app.models.analysis_log import AnalysisLog
+                    db.add(AnalysisLog(
+                        analysis_id=analysis.id,
+                        agent_name="System",
+                        action="Error",
+                        details=f"LLM Enhancement Failed: {str(e)}. Falling back to static analysis."
+                    ))
+                    await db.commit()
+                    
                     report_data = _generate_real_report(scan_result, analysis.project_name)
             
             elif plan_tasks:
@@ -115,6 +125,17 @@ async def run_analysis_pipeline(
                                 context_str += f"\nFILE: {os.path.basename(fpath)}\n{content}\n"
                                 total_files += 1
                                 total_lines += content.count('\n')
+                                
+                                # Log progress
+                                from app.models.analysis_log import AnalysisLog
+                                db.add(AnalysisLog(
+                                    analysis_id=analysis.id,
+                                    agent_name=task.agent,
+                                    action="Reading File",
+                                    details=f"Processing {os.path.basename(fpath)}"
+                                ))
+                                await db.commit()
+
                         except Exception as e:
                             logger.warning(f"Failed to read local file {fpath}: {e}")
                 
@@ -137,8 +158,18 @@ async def run_analysis_pipeline(
                      # In a real system, we'd halt or sanitize. For MVP, we log.
 
                 try:
-                     report_data = await _generate_llm_enhanced_report(scan, analysis.project_name)
+                     report_data = await _generate_llm_enhanced_report(scan, analysis.project_name, str(analysis.id), db)
                 except Exception as e:
+                     # Log failure to DB for user visibility
+                     from app.models.analysis_log import AnalysisLog
+                     db.add(AnalysisLog(
+                        analysis_id=analysis.id,
+                        agent_name="System",
+                        action="Error",
+                        details=f"LLM Enhancement Failed (P2P): {str(e)}. Falling back to static analysis."
+                    ))
+                     await db.commit()
+                     
                      logger.error(f"LLM task failed: {e}")
                      # Fallback
                      report_data = _generate_mock_report(total_files, total_lines, {}, analysis.project_name)

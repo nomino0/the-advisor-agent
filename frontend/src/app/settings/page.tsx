@@ -29,6 +29,11 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Password
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passLoading, setPassLoading] = useState(false);
+
   useEffect(() => {
     if (!token) return;
     api("/api/v1/auth/me", { token })
@@ -86,6 +91,29 @@ export default function SettingsPage() {
       toast.error(e.message || "Failed to save");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    setPassLoading(true);
+    try {
+      await api("/api/v1/user/password", {
+        method: "PUT",
+        token: token!,
+        body: { current_password: currentPassword, new_password: newPassword },
+      });
+      toast.success("Password updated successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update password");
+    } finally {
+      setPassLoading(false);
     }
   };
 
@@ -179,7 +207,27 @@ export default function SettingsPage() {
           )}
         </section>
 
+        {/* ── Security: Password ── */}
+        <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Change Password</h2>
+          <form className="space-y-4" onSubmit={handlePasswordChange}>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Current Password</label>
+              <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">New Password</label>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition" required minLength={8} />
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Must be at least 8 characters.</p>
+            </div>
+            <button type="submit" disabled={passLoading || !currentPassword || !newPassword} className="bg-slate-900 dark:bg-slate-700 text-white px-5 py-2 rounded-lg font-medium hover:bg-slate-800 dark:hover:bg-slate-600 transition disabled:opacity-50 text-sm">
+              {passLoading ? "Updating..." : "Update Password"}
+            </button>
+          </form>
+        </section>
+
         {/* ── GitHub Connection ── */}
+        {profile?.role !== 'admin' && (
         <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -231,6 +279,7 @@ export default function SettingsPage() {
             </button>
           </form>
         </section>
+        )}
 
         {/* ── Danger Zone ── */}
         <section className="bg-white dark:bg-slate-900 rounded-xl border border-red-200 dark:border-red-900/50 p-6">

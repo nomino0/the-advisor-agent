@@ -10,6 +10,7 @@ class LLMProviderBase(BaseModel):
     models: List[str] = Field(default_factory=list)
     priority: int = 10
     is_active: bool = True
+    agent_capability: List[str] = Field(default=["general"])
 
 class LLMProviderCreate(LLMProviderBase):
     pass
@@ -22,6 +23,7 @@ class LLMProviderUpdate(BaseModel):
     models: Optional[List[str]] = None
     priority: Optional[int] = None
     is_active: Optional[bool] = None
+    agent_capability: Optional[List[str]] = None
 
 class LLMProviderResponse(LLMProviderBase):
     id: UUID

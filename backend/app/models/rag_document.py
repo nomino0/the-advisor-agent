@@ -24,6 +24,8 @@ class RagDocument(Base):
     status: Mapped[str] = mapped_column(
         String(50), default="pending"  # pending, indexed, failed
     )
+    description: Mapped[str] = mapped_column(Text, nullable=True, default="")
+    target_agent: Mapped[str] = mapped_column(String(50), nullable=True, default="general")
     uploaded_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )

@@ -126,6 +126,13 @@ class AnalysisReport(BaseModel):
         from_attributes = True
 
 
+class AnalysisLogResponse(BaseModel):
+    id: str
+    agent_name: str
+    action: str
+    details: Optional[str]
+    timestamp: str
+
 class AnalysisListResponse(BaseModel):
     analyses: List[AnalysisSummary]
     total: int

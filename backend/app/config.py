@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     # LLM
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    groq_api_key: str = ""
     llm_mock_mode: bool = True
 
     # Stripe

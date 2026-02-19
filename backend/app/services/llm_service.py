@@ -8,18 +8,40 @@ from app.db.session import AsyncSessionLocal
 logger = logging.getLogger("cloudwise.llm")
 
 class LLMService:
-    async def get_active_provider(self, provider_name: str = None) -> LLMProvider:
+    async def get_active_provider(self, provider_name: str = None, capability: str = "general") -> LLMProvider:
         async with AsyncSessionLocal() as db:
-            if provider_name:
-                result = await db.execute(select(LLMProvider).where(LLMProvider.name == provider_name))
-            else:
-                # Default to first active provider
-                result = await db.execute(select(LLMProvider).where(LLMProvider.is_active == True).limit(1))
+            query = select(LLMProvider).where(LLMProvider.is_active == True)
             
-            provider = result.scalar_one_or_none()
-            if not provider:
+            if provider_name:
+                query = query.where(LLMProvider.name == provider_name)
+            
+            # Filter by capability if column exists (we handle migration separately)
+            # customized logic: retrieve all, then filter in python to avoid schema error if migration failed
+            result = await db.execute(query)
+            providers = result.scalars().all()
+            
+            # Filter by capability if we have the column and data
+            # For now, simplistic selection
+            
+            if not providers:
+                # Fallback to .env for Groq if no providers in DB
+                from app.config import settings
+                if settings.groq_api_key:
+                    logger.warning("No DB providers found. Using .env GROQ_API_KEY fallback.")
+                    return LLMProvider(
+                        name="Groq (Env)",
+                        provider_type="openai",
+                        base_url="https://api.groq.com/openai/v1",
+                        api_key=settings.groq_api_key,
+                        models=["llama3-70b-8192"],
+                        priority=1,
+                        is_active=True
+                    )
                 raise ValueError(f"No active LLM provider found (requested: {provider_name})")
-            return provider
+            
+            # Simple priority sort
+            providers.sort(key=lambda p: p.priority)
+            return providers[0]
 
     async def generate_completion(self, prompt: str, system_prompt: str = "You are a helpful assistant.", provider_name: str = None, model: str = None) -> str:
         provider = await self.get_active_provider(provider_name)

@@ -14,7 +14,7 @@ import logging
 from app.config import settings
 from app.core.rate_limit import limiter
 from app.db.session import engine, Base
-from app.api.v1 import auth, analysis, health, user, admin, payments, subscriptions, github_oauth, llm_config
+from app.api.v1 import auth, analysis, health, user, admin, payments, subscriptions, github_oauth, llm_config, knowledge_base
 
 # Logging configuration
 logging.basicConfig(
@@ -123,6 +123,7 @@ app.include_router(payments.router, prefix="/api/v1/payments", tags=["Payments"]
 app.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["Subscriptions"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin"])
 app.include_router(llm_config.router, prefix="/api/v1/config/llm", tags=["LLM Configuration"])
+app.include_router(knowledge_base.router, prefix="/api/v1/config/kb", tags=["Knowledge Base Configuration"])
 
 
 @app.get("/")

@@ -13,6 +13,7 @@ from app.models.user import User, UserRole
 from app.models.user_connection import UserConnection
 from app.schemas.auth import UserResponse
 from app.services.audit_service import record_audit
+from app.security.password import hash_password, verify_password
 
 router = APIRouter()
 
@@ -20,6 +21,11 @@ router = APIRouter()
 class UpdateProfileRequest(BaseModel):
     full_name: Optional[str] = Field(None, max_length=255)
     email: Optional[str] = Field(None, max_length=255)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8)
 
 
 class AddGithubPATRequest(BaseModel):
@@ -109,6 +115,32 @@ async def update_profile(
         totp_enabled=current_user.totp_enabled,
         created_at=current_user.created_at.isoformat(),
     )
+
+
+@router.put("/password")
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the current user's password."""
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password",
+        )
+
+    current_user.password_hash = hash_password(body.new_password)
+    await db.flush()
+
+    await record_audit(
+        db, action="user.password_change", user_id=current_user.id,
+        resource="user", details="Password changed",
+        ip_address=_get_client_ip(request),
+    )
+
+    return {"message": "Password changed successfully"}
 
 
 @router.post("/github/pat", response_model=ConnectionResponse)

@@ -26,7 +26,15 @@ interface Finding {
   recommendation: string;
 }
 
-interface CloudService {
+ interface AnalysisLog {
+  id: string;
+  agent_name: string;
+  action: string;
+  details: string;
+  timestamp: string;
+}
+
+ interface CloudService {
   provider: string;
   service: string;
   reason: string;
@@ -41,6 +49,24 @@ interface ProviderComparison {
   pros: string[];
   cons: string[];
   services: CloudService[];
+}
+
+
+
+interface AnalysisLog {
+  id: string;
+  agent_name: string;
+  action: string;
+  details: string;
+  timestamp: string;
+}
+
+interface PillarScore {
+  name: string;
+  score: number;
+  grade: string;
+  findings_count: number;
+  critical_count: number;
 }
 
 interface Report {
@@ -111,6 +137,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
   const { id } = params;
   const router = useRouter();
   const [report, setReport] = useState<Report | null>(null);
+  const [logs, setLogs] = useState<AnalysisLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [unlocking, setUnlocking] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "findings" | "cloud" | "deploy">("overview");
@@ -124,18 +151,33 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
     }
 
     const fetchReport = async () => {
+      if (typeof window === 'undefined') return;
       try {
         const data = await api(`/api/v1/analysis/${id}`, { token });
         setReport(data);
+
+        // Fetch logs if processing OR recently completed (to show full history)
+        if (data.status === 'processing' || data.status === 'pending') {
+          try {
+             const logRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/analysis/${id}/logs`, {
+                 headers: { "Authorization": `Bearer ${token}` }
+             });
+             if (logRes.ok) {
+                 const logData = await logRes.json();
+                 setLogs(logData);
+             }
+          } catch (e) { console.error(e) }
+        }
       } catch {
-        router.push("/dashboard");
+        // Only redirect if completely failed first time
+        if (!report) router.push("/dashboard");
       } finally {
         setLoading(false);
       }
     };
 
     fetchReport();
-    const interval = setInterval(fetchReport, 3000);
+    const interval = setInterval(fetchReport, 2000); // 2s polling
     return () => clearInterval(interval);
   }, [id, token, router]);
 
@@ -202,10 +244,32 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
               6 specialized agents are working on your project. This usually takes
               10-30 seconds.
             </p>
-            <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+            <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400 opacity-75">
               <span>Planner</span>&#8594;<span>Security Analyst</span>&#8594;
               <span>Auditor</span>&#8594;<span>Cloud Advisor</span>&#8594;<span>Critic</span>&#8594;
               <span>Reporter</span>
+            </div>
+            
+            <div className="mt-8 text-left bg-white dark:bg-slate-900 rounded-lg p-4 h-48 overflow-y-auto border border-slate-200 dark:border-slate-800 font-mono text-xs shadow-inner">
+               {logs.length === 0 ? (
+                  <p className="text-slate-400 italic">Initializing agents...</p>
+               ) : (
+                  <div className="space-y-1">
+                     {logs.map((log) => (
+                        <div key={log.id} className="flex gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                           <span className="text-slate-400 shrink-0 w-16 text-[10px] pt-0.5">{new Date(log.timestamp).toLocaleTimeString().split(' ')[0]}</span>
+                           <span className={`font-bold shrink-0 w-24 ${
+                                log.agent_name === 'Security' ? 'text-red-500' :
+                                log.agent_name === 'Planner' ? 'text-purple-500' :
+                                log.agent_name === 'Cloud Architect' ? 'text-blue-500' :
+                                'text-green-500'
+                           }`}>{log.agent_name}:</span>
+                           <span className="text-slate-700 dark:text-slate-300 break-all">{log.details || log.action}</span>
+                        </div>
+                     ))}
+                     <div className="h-4" /> {/* Spacer */}
+                  </div>
+               )}
             </div>
           </div>
         )}

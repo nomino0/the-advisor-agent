@@ -14,7 +14,7 @@ import tempfile
 import os
 import logging
 from io import BytesIO
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,12 +25,14 @@ from app.db.session import get_db
 from app.api.dependencies import get_current_user
 from app.models.user import User
 from app.models.analysis import Analysis, AnalysisStatus, SourceType
+from app.models.analysis_log import AnalysisLog
 from app.models.user_connection import UserConnection
 from app.schemas.analysis import (
     LocalAnalysisRequest,
     AnalysisConnectRequest,
     AnalysisSummary,
     AnalysisReport,
+    AnalysisLogResponse,
     AnalysisListResponse,
     PillarScore,
     Finding,
@@ -79,6 +81,39 @@ def _get_client_ip(request: Request) -> str:
 
 
 from app.services.planner_service import PlannerService
+
+@router.get("/{analysis_id}/logs", response_model=List[AnalysisLogResponse])
+async def get_analysis_logs(
+    analysis_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the execution logs (agent thoughts/actions) for an analysis."""
+    # check access
+    result = await db.execute(select(Analysis).where(Analysis.id == analysis_id))
+    analysis = result.scalar_one_or_none()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+        
+    if analysis.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    logs_result = await db.execute(
+        select(AnalysisLog)
+        .where(AnalysisLog.analysis_id == analysis_id)
+        .order_by(AnalysisLog.timestamp.asc())
+    )
+    logs = logs_result.scalars().all()
+    
+    return [
+        AnalysisLogResponse(
+            id=str(log.id),
+            agent_name=log.agent_name,
+            action=log.action,
+            details=log.details,
+            timestamp=log.timestamp.isoformat()
+        ) for log in logs
+    ]
 
 @router.post("/local", response_model=AnalysisSummary, status_code=status.HTTP_201_CREATED)
 async def analyze_local_project(

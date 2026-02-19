@@ -14,4 +14,5 @@ class LLMProvider(Base):
     models = Column(JSON, default=[])  # List of model names supported
     priority = Column(Integer, default=10) # Lower number = higher priority
     is_active = Column(Boolean, default=True)
+    agent_capability = Column(JSON, default=["general"]) # List of capabilities: ["general", "security", "planner", "critic"]
 

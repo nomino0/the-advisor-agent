@@ -69,6 +69,7 @@ class Analysis(Base):
 
     # Relationships
     user = relationship("User", back_populates="analyses")
+    logs = relationship("AnalysisLog", back_populates="analysis", cascade="all, delete-orphan", lazy="selectin")
     agent_executions = relationship("AgentExecution", back_populates="analysis", lazy="selectin")
     reports = relationship("AnalysisReport", back_populates="analysis", lazy="selectin")
     payment = relationship("Payment", back_populates="analysis", uselist=False, lazy="selectin")

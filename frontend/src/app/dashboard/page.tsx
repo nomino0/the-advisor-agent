@@ -64,6 +64,13 @@ function StatusBadge({ status }: { status: string }) {
 export default function DashboardPage() {
   const router = useRouter();
   const { user, token, isAdmin, loading: authLoading, logout } = useAuth({ requireAuth: true });
+
+  useEffect(() => {
+    if (!authLoading && user?.role === "admin") {
+      router.replace("/admin");
+    }
+  }, [user, authLoading, router]);
+
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
   const [analysesLoading, setAnalysesLoading] = useState(true);
 
