@@ -1,10 +1,11 @@
 # ============================================
-# CloudWise AI — Docker Compose
+# CloudWise AI — Docker Compose Configuration
+# Production-Ready Multi-Stage Setup
 # ============================================
 version: "3.9"
 
 services:
-  # ─── PostgreSQL ────────────────────────────
+  # ─── PostgreSQL Database ───────────────────
   postgres:
     image: postgres:16-alpine
     container_name: cloudwise-postgres
@@ -13,46 +14,74 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-cloudwise}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudwise_secret}
       POSTGRES_DB: ${POSTGRES_DB:-cloudwise_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cloudwise -d cloudwise_db"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cloudwise} -d ${POSTGRES_DB:-cloudwise_db}"]
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 20s
+    networks:
+      - cloudwise-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # ─── Redis ─────────────────────────────────
+  # ─── Redis Cache ───────────────────────────
   redis:
     image: redis:7-alpine
     container_name: cloudwise-redis
     restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - cloudwise-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ─── Backend (FastAPI) ─────────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        - PYTHON_VERSION=3.11
     container_name: cloudwise-backend
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cloudwise}:${POSTGRES_PASSWORD:-cloudwise_secret}@postgres:5432/${POSTGRES_DB:-cloudwise_db}
-      REDIS_URL: redis://redis:6379/0
+      # Database Configuration
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cloudwise}:${POSTGRES_PASSWORD:-cloudwise_secret}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cloudwise_db}
       POSTGRES_HOST: postgres
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      # Redis Configuration
+      REDIS_URL: redis://:${REDIS_PASSWORD:-}@redis:${REDIS_PORT:-6379}/0
       REDIS_HOST: redis
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      # Application Settings
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,6 +89,20 @@ services:
         condition: service_healthy
     volumes:
       - upload_data:/app/uploads
+      - ./backend/app:/app/app:ro
+    networks:
+      - cloudwise-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   # ─── Frontend (Next.js) ────────────────────
   frontend:
@@ -67,17 +110,44 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NODE_ENV: production
     container_name: cloudwise-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    networks:
+      - cloudwise-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
+# ─── Volumes ────────────────────────────────
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   upload_data:
+    driver: local
+
+# ─── Networks ────────────────────────────────
+networks:
+  cloudwise-network:
+    driver: bridge

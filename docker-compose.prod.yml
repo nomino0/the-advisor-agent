@@ -1,0 +1,58 @@
+# ============================================
+# CloudWise AI — Docker Compose Production Override
+# Used with: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ============================================
+version: "3.9"
+
+services:
+  postgres:
+    restart: always
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-cloudwise_redis_prod_secret}
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    restart: always
+    environment:
+      ENVIRONMENT: production
+      LOG_LEVEL: warning
+      DEBUG: "false"
+    healthcheck:
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  frontend:
+    restart: always
+    environment:
+      NODE_ENV: production
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
