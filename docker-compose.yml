@@ -1,58 +1,78 @@
 # ============================================
-# CloudWise AI — Docker Compose
+# CloudWise AI — Secure Docker Compose (Production)
 # ============================================
 version: "3.9"
 
+# ─── Define Secrets ─────────────────────────
+secrets:
+  postgres_user:
+    file: ./secrets/postgres_user.txt
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+
+# ─── Define Networks ────────────────────────
+networks:
+  internal:
+    driver: bridge
+  frontend-net:
+    driver: bridge
+
+# ─── Services ──────────────────────────────
 services:
-  # ─── PostgreSQL ────────────────────────────
+
+  # ─── PostgreSQL ──────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: cloudwise-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-cloudwise}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudwise_secret}
-      POSTGRES_DB: ${POSTGRES_DB:-cloudwise_db}
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: cloudwise_db
+    secrets:
+      - postgres_user
+      - postgres_password
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cloudwise -d cloudwise_db"]
+      test: ["CMD-SHELL", "pg_isready -U $(cat /run/secrets/postgres_user) -d cloudwise_db"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  # ─── Redis ─────────────────────────────────
+  # ─── Redis ───────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: cloudwise-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    command: ["redis-server", "--requirepass", "$(cat /run/secrets/redis_password)"]
+    secrets:
+      - redis_password
     volumes:
       - redis_data:/data
+    networks:
+      - internal
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "$(cat /run/secrets/redis_password)", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
 
-  # ─── Backend (FastAPI) ─────────────────────
+  # ─── Backend (FastAPI) ───────────────────
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: cloudwise-backend
     restart: unless-stopped
-    env_file: .env
+    env_file: .env  # Only non-secret configs
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-cloudwise}:${POSTGRES_PASSWORD:-cloudwise_secret}@postgres:5432/${POSTGRES_DB:-cloudwise_db}
-      REDIS_URL: redis://redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://$(cat /run/secrets/postgres_user):$(cat /run/secrets/postgres_password)@postgres:5432/cloudwise_db
+      REDIS_URL: redis://:$(cat /run/secrets/redis_password)@redis:6379/0
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
-    ports:
-      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,23 +80,34 @@ services:
         condition: service_healthy
     volumes:
       - upload_data:/app/uploads
+    networks:
+      - internal
+      - frontend-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # ─── Frontend (Next.js) ────────────────────
+  # ─── Frontend (Next.js) ──────────────────
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: https://backend:8000
     container_name: cloudwise-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: https://backend:8000
     ports:
-      - "3000:3000"
+      - "443:443"  # HTTPS
     depends_on:
       - backend
+    networks:
+      - frontend-net
 
+# ─── Volumes ──────────────────────────────
 volumes:
   postgres_data:
   redis_data:
