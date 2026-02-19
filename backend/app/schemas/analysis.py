@@ -33,6 +33,26 @@ class AnalysisConnectRequest(BaseModel):
     preferences: Optional[Dict[str, Any]] = Field(default=None, description="Analysis preferences")
 
 
+class RepoPreviewRequest(BaseModel):
+    """Request to fetch file tree for confirmation before analysis."""
+    repo_url: str = Field(..., max_length=1000)
+    branch: Optional[str] = Field("main", max_length=255)
+    is_private: bool = False
+
+class FileNode(BaseModel):
+    name: str 
+    path: str 
+    type: str # file or folder
+    size: Optional[int] = None
+    children: Optional[List['FileNode']] = None
+
+class RepoPreviewResponse(BaseModel):
+    files: List[FileNode]  # Top-level files/folders
+    total_files: int
+    total_size_kb: int
+    root_path: str
+
+
 class AnalysisUploadPreferences(BaseModel):
     detail_level: str = Field(default="standard", pattern="^(standard|detailed|executive)$")
     focus_areas: Optional[List[str]] = None

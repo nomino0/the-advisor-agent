@@ -12,6 +12,7 @@ import uuid
 import zipfile
 import tempfile
 import os
+import shutil
 import logging
 from io import BytesIO
 from typing import Optional, List
@@ -42,6 +43,9 @@ from app.schemas.analysis import (
     GrantActivateRequest,
     GrantActivateResponse,
     GrantStatusResponse,
+    RepoPreviewRequest,
+    RepoPreviewResponse,
+    FileNode,
 )
 from app.services.analysis_service import run_analysis_pipeline
 from app.services.repo_service import (
@@ -114,6 +118,114 @@ async def get_analysis_logs(
             timestamp=log.timestamp.isoformat()
         ) for log in logs
     ]
+
+def _build_file_tree(root_path: str, rel_path: str = "") -> Optional[FileNode]:
+    """Recursively build a file tree structure."""
+    try:
+        name = os.path.basename(root_path) or "root"
+        is_dir = os.path.isdir(root_path)
+        
+        # Skip .git, .env, .pyc
+        if name in [".git", "__pycache__", ".env", ".venv", "node_modules"]:
+            return None
+            
+        node = FileNode(
+            name=name,
+            path=rel_path,
+            type="folder" if is_dir else "file",
+            size=os.path.getsize(root_path) if not is_dir else 0,
+            children=[] if is_dir else None
+        )
+
+        if is_dir:
+            try:
+                items = sorted(os.listdir(root_path))
+                for item in items:
+                    full_path = os.path.join(root_path, item)
+                    child_rel_path = os.path.join(rel_path, item).replace("\\", "/")
+                    if rel_path == "":
+                        child_rel_path = item
+                        
+                    child = _build_file_tree(full_path, child_rel_path)
+                    if child:
+                        node.children.append(child)
+                        # Accumulate size for folders
+                        node.size = (node.size or 0) + (child.size or 0)
+            except PermissionError:
+                pass
+        
+        # If folder is empty after filtering (e.g. only contained .git), prune it? 
+        # Optional, but keep it for now.
+        return node
+    except Exception as e:
+        logger.error(f"Error building file tree for {root_path}: {e}")
+        return None
+
+
+@router.post("/preview", response_model=RepoPreviewResponse)
+async def preview_repo_content(
+    request: RepoPreviewRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Clone a repo temporarily and return its file structure for confirmation."""
+    logger.info(f"Previewing repo: {request.repo_url} (branch={request.branch})")
+    clone_dir = None
+    try:
+        # P2P Architecture: Ephemeral clone
+        clone_dir, owner, repo = await clone_public_repo(
+            repo_url=request.repo_url,
+            branch=request.branch or "main",
+            provider="github"
+        )
+        
+        logger.info(f"Repo cloned to {clone_dir}, building tree...")
+
+        # Build tree structure
+        tree = _build_file_tree(clone_dir)
+        
+        # Get top-level files/folders from tree
+        files = tree.children if tree and tree.children else []
+        
+        # Calculate stats
+        total_files = 0
+        def count_files(node):
+            nonlocal total_files
+            if not node: return
+            if node.type == "file":
+                total_files += 1
+            if node.children:
+                for child in node.children:
+                    count_files(child)
+        
+        if tree:
+            count_files(tree)
+            
+        total_size_kb = (tree.size if tree else 0) // 1024
+        
+        return RepoPreviewResponse(
+            files=files,
+            total_files=total_files,
+            total_size_kb=total_size_kb,
+            root_path=clone_dir
+        )
+
+    except Exception as e:
+        import traceback
+        logger.error(f"Failed to preview repo: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=400, detail=f"Failed to preview repository: {str(e)}")
+
+    finally:
+        # P2P Architecture: Cleanup ephemeral code immediately
+        if clone_dir:
+             try:
+                # clone_public_repo returns the repo folder inside temp dir
+                # We need to remove the temp dir which is parent of clone_dir
+                parent_dir = os.path.dirname(clone_dir)
+                if parent_dir and os.path.exists(parent_dir):
+                    logger.info(f"Cleaning up preview repo at {parent_dir}")
+                    shutil.rmtree(parent_dir, ignore_errors=True)
+             except Exception as cleanup_err:
+                 logger.warning(f"Failed to cleanup preview repo: {cleanup_err}")
 
 @router.post("/local", response_model=AnalysisSummary, status_code=status.HTTP_201_CREATED)
 async def analyze_local_project(

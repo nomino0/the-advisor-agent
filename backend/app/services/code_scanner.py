@@ -139,6 +139,10 @@ def scan_directory(directory: str) -> Dict[str, Any]:
     file_details: List[Dict[str, Any]] = []
     finding_id = 0
 
+    logger.info("Starting code scan...")
+    file_count = 0
+    last_log = 0
+
     for root, dirs, files in os.walk(directory):
         # Prune ignored directories
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not d.startswith(".")]
@@ -158,6 +162,12 @@ def scan_directory(directory: str) -> Dict[str, Any]:
             lang = EXT_LANG_MAP.get(ext)
             if not lang:
                 continue
+
+            file_count += 1
+            # Log progress every 50 files
+            if file_count - last_log >= 50:
+                logger.info("Scanning progress: %d files processed...", file_count)
+                last_log = file_count
 
             total_files += 1
             languages[lang] = languages.get(lang, 0) + 1

@@ -142,6 +142,42 @@ export function AdminKnowledgeBase({ knowledgeBases, documents, token, loadData 
     }
   };
 
+  const handleUploadDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Use current form state or defaults
+    const collection = docForm.collection || "cloud_docs";
+    const description = docForm.description || "";
+    const target_agent = docForm.target_agent || "general";
+
+    try {
+      setUploadingDoc(true);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("collection", collection);
+      formData.append("description", description);
+      formData.append("target_agent", target_agent);
+
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/admin/rag/upload`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+        body: formData
+      });
+      
+      if (!res.ok) throw new Error("Upload failed");
+      
+      toast.success("Document uploaded");
+      loadData();
+      // Reset input value to allow re-uploading same file if needed
+      e.target.value = "";
+    } catch (err) {
+      toast.error("Failed to upload document");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
@@ -356,7 +392,7 @@ export function AdminKnowledgeBase({ knowledgeBases, documents, token, loadData 
              <label className={`cursor-pointer bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}>
               {uploadingDoc ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               {uploadingDoc ? 'Uploading...' : 'Upload File'}
-              <input type="file" className="hidden" onChange={handleUploadDoc} accept=".pdf,.md,.txt,.json" />
+              <input type="file" className="hidden" onChange={handleUploadDoc} accept=".pdf,.md,.txt,.json" disabled={uploadingDoc} />
             </label>
          </div>
          

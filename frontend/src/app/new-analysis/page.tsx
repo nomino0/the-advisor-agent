@@ -45,7 +45,7 @@ interface GrantStatus {
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Main Page Component
 // ---------------------------------------------------------------------------
 
 export default function NewAnalysisPage() {
@@ -59,6 +59,10 @@ export default function NewAnalysisPage() {
   const [repoUrl, setRepoUrl] = useState("");
   const [driveFolderId, setDriveFolderId] = useState("");
 
+  // Analysis progress state
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStep, setAnalysisStep] = useState("");
+
   // GitHub-specific state
   const [repoVisibility, setRepoVisibility] =
     useState<RepoVisibility>("public");
@@ -67,7 +71,6 @@ export default function NewAnalysisPage() {
   const [patToken, setPatToken] = useState("");
   const [patSaving, setPatSaving] = useState(false);
   const [showPatForm, setShowPatForm] = useState(false);
-
   // Grant Access state
   const [grantStep, setGrantStep] = useState<GrantStep>("select-os");
   const [targetOS, setTargetOS] = useState<TargetOS>("windows");
@@ -184,6 +187,8 @@ export default function NewAnalysisPage() {
     if (!token || !provider) return;
     setLoading(true);
     setError("");
+    setAnalysisProgress(0);
+    setAnalysisStep("Initializing...");
 
     try {
       const body: any = {
@@ -194,14 +199,40 @@ export default function NewAnalysisPage() {
         body.drive_folder_id = driveFolderId;
       }
 
+      // Simulate progress updates for real stages: download → extract → scan
+      const progressInterval = setInterval(() => {
+        setAnalysisProgress((prev) => {
+          if (prev < 25) {
+            setAnalysisStep("Downloading repository...");
+            return prev + 6;
+          } else if (prev < 60) {
+            setAnalysisStep("Extracting files...");
+            return prev + 5;
+          } else if (prev < 90) {
+            setAnalysisStep("Scanning code...");
+            return prev + 3;
+          }
+          return prev;
+        });
+      }, 400);
+
       const data = await api("/api/v1/analysis/connect", {
         method: "POST",
         body,
         token,
       });
-      router.push(`/analysis/${data.id}`);
+
+      clearInterval(progressInterval);
+      setAnalysisProgress(100);
+      setAnalysisStep("Processing analysis...");
+      
+      setTimeout(() => {
+        router.push(`/analysis/${data.id}`);
+      }, 300);
     } catch (err: any) {
       setError(err.message || "Connection failed");
+      setAnalysisProgress(0);
+      setAnalysisStep("");
     } finally {
       setLoading(false);
     }
@@ -640,6 +671,26 @@ export default function NewAnalysisPage() {
                 </div>
               )}
 
+              {/* Progress bar during analysis */}
+              {loading && analysisProgress > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                      {analysisStep}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {Math.round(analysisProgress)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 transition-all duration-300 ease-out rounded-full shadow-lg"
+                      style={{ width: `${analysisProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={
@@ -649,7 +700,7 @@ export default function NewAnalysisPage() {
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading
-                  ? "Cloning and Analyzing..."
+                  ? `${analysisStep || "Analyzing"} (${Math.round(analysisProgress)}%)`
                   : "Connect and Start Analysis"}
               </button>
 
@@ -749,13 +800,33 @@ export default function NewAnalysisPage() {
                 </div>
               )}
 
+              {/* Progress bar during analysis */}
+              {loading && analysisProgress > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                      {analysisStep}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {Math.round(analysisProgress)}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 via-cyan-500 to-blue-500 transition-all duration-300 ease-out rounded-full shadow-lg"
+                      style={{ width: `${analysisProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading
-                  ? "Connecting and Analyzing..."
+                  ? `${analysisStep || "Processing"} (${Math.round(analysisProgress)}%)`
                   : "Connect and Start Analysis"}
               </button>
 

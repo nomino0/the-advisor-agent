@@ -256,6 +256,7 @@ async def download_github_tarball(
     tarball_path = os.path.join(tmpdir, "repo.tar.gz")
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=120) as client:
+        logger.info("Downloading tarball from GitHub...")
         resp = await client.get(url, headers=headers)
 
         # Fallback: If token is invalid (401), retry without it for public repos
@@ -283,10 +284,14 @@ async def download_github_tarball(
     os.makedirs(extract_dir, exist_ok=True)
 
     try:
+        logger.info("Extracting tarball...")
         with tarfile.open(tarball_path, "r:gz") as tar:
             # Strip the top-level directory (equivalent to --strip-components=1)
             members = tar.getmembers()
-            for member in members:
+            logger.info("Extracting %d files...", len(members))
+            for i, member in enumerate(members):
+                if (i + 1) % max(1, len(members) // 10) == 0:
+                    logger.info("Extraction progress: %d/%d files", i + 1, len(members))
                 parts = member.name.split("/", 1)
                 if len(parts) > 1:
                     member.name = parts[1]

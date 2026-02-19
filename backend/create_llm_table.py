@@ -58,28 +58,31 @@ async def create_table():
             result = await conn.execute(text("SELECT count(*) FROM llm_providers"))
             count = result.scalar()
             
-            if count == 0:
-                print("Seeding Groq provider from .env...")
-                from app.config import settings
-                key = settings.groq_api_key
-                if key:
-                    await conn.execute(text(f"""
-                        INSERT INTO llm_providers (id, name, provider_type, base_url, api_key, models, priority, is_active, agent_capability)
-                        VALUES (
-                            gen_random_uuid(), 
-                            'Groq', 
-                            'openai', 
-                            'https://api.groq.com/openai/v1', 
-                            '{key}', 
-                            '["llama3-70b-8192", "mixtral-8x7b-32768"]'::jsonb, 
-                            1, 
-                            TRUE, 
-                            '["general", "security", "planner"]'::jsonb
-                        );
-                    """))
-                    print("Seeded Groq provider.")
-                else:
-                    print("No Groq key in settings.")
+            # Always update Groq provider to latest model and API key from .env
+            print("Updating Groq-Kimi provider from .env...")
+            from app.config import settings
+            key = settings.groq_api_key
+            if key:
+                # First delete old provider if exists
+                await conn.execute(text("DELETE FROM llm_providers WHERE name = 'Groq' OR name = 'Groq-Kimi';"))
+                # Seed with Kimi model (using parameterized query to prevent SQL injection)
+                await conn.execute(text("""
+                    INSERT INTO llm_providers (id, name, provider_type, base_url, api_key, models, priority, is_active, agent_capability)
+                    VALUES (
+                        gen_random_uuid(), 
+                        'Groq-Kimi', 
+                        'groq', 
+                        'https://api.groq.com/openai/v1', 
+                        :api_key, 
+                        '["moonshotai/kimi-k2-instruct-0905"]'::jsonb, 
+                        1, 
+                        TRUE, 
+                        '["general", "security", "planner"]'::jsonb
+                    );
+                """), {"api_key": key})
+                print("Updated Groq provider with moonshotai/kimi-k2-instruct-0905 model.")
+            else:
+                print("No Groq key in settings.")
 
     except Exception as e:
         print(f"Error creating/updating table: {e}")

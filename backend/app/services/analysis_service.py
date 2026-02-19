@@ -87,6 +87,8 @@ async def run_analysis_pipeline(
                     if scan_result.get("llm_context"):
                         logger.info("Using LLM to enhance analysis report...")
                         report_data = await _generate_llm_enhanced_report(scan_result, analysis.project_name, str(analysis.id), db)
+                        if report_data is None:
+                            raise ValueError("LLM report generation returned None")
                     else:
                          report_data = _generate_real_report(scan_result, analysis.project_name)
                 except Exception as e:
@@ -102,6 +104,9 @@ async def run_analysis_pipeline(
                     await db.commit()
                     
                     report_data = _generate_real_report(scan_result, analysis.project_name)
+                    if report_data is None:
+                        logger.error("Report generation completely failed - using mock")
+                        report_data = _generate_mock_report(scan_result.get("total_files", 0), scan_result.get("total_lines", 0), scan_result.get("languages", {}), analysis.project_name)
             
             elif plan_tasks:
                 # NEW LOGIC: P2P Mode (Planner Execution)
@@ -159,6 +164,8 @@ async def run_analysis_pipeline(
 
                 try:
                      report_data = await _generate_llm_enhanced_report(scan, analysis.project_name, str(analysis.id), db)
+                     if report_data is None:
+                         raise ValueError("LLM report generation returned None")
                 except Exception as e:
                      # Log failure to DB for user visibility
                      from app.models.analysis_log import AnalysisLog
@@ -171,8 +178,11 @@ async def run_analysis_pipeline(
                      await db.commit()
                      
                      logger.error(f"LLM task failed: {e}")
-                     # Fallback
-                     report_data = _generate_mock_report(total_files, total_lines, {}, analysis.project_name)
+                     # Fallback to real report generation from context
+                     report_data = _generate_real_report(scan, analysis.project_name)
+                     if report_data is None:
+                         logger.error("P2P Report generation completely failed - using mock")
+                         report_data = _generate_mock_report(total_files, total_lines, {}, analysis.project_name)
             else:
                 logger.info("No scan data — using mock report for analysis %s", analysis_id)
                 report_data = _generate_mock_report(
