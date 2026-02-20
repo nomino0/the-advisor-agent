@@ -115,3 +115,6 @@ This document matches the **actual shipping code**. Note differences from the as
 | **Memory** | Stateless (Per-run) | Long-term Memory (Vector DB) |
 
 The current architecture was chosen to maximize **reliability** and **latency** (speed) for the v1 release, avoiding the complexity and instability often associated with fully autonomous agent swarms.
+
+
+

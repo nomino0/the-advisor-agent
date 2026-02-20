@@ -88,7 +88,7 @@ export function AdminKnowledgeBase({ knowledgeBases, documents, token, loadData 
              formData.append("description", docForm.description);
              formData.append("target_agent", docForm.target_agent);
 
-             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/admin/rag/upload`, {
+             const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/rag/upload`, {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${token}` },
                 body: formData
@@ -159,7 +159,7 @@ export function AdminKnowledgeBase({ knowledgeBases, documents, token, loadData 
       formData.append("description", description);
       formData.append("target_agent", target_agent);
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/admin/rag/upload`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/rag/upload`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` },
         body: formData

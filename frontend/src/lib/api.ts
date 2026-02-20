@@ -1,6 +1,6 @@
 import toast from "react-hot-toast";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface ApiOptions {
   method?: string;
@@ -38,7 +38,7 @@ export async function api(endpoint: string, options: ApiOptions = {}) {
     sessionStorage.removeItem("user");
     document.cookie = `access_token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict`;
     document.cookie = `user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Strict`;
-    
+
     toast.error("Session expired. Please log in again.", { id: "session-expired" });
     window.location.href = "/login";
     throw new Error("Session expired");

@@ -9,7 +9,6 @@
 1. [Executive Summary](#1-executive-summary)
 2. [Problem Statement](#2-problem-statement)
 3. [Solution Overview](#3-solution-overview)
-4. [Monetization & Pricing Model](#4-monetization--pricing-model)
 5. [Platform Architecture](#5-platform-architecture)
 6. [Multi-Agent System Design](#6-multi-agent-system-design)
 7. [Agent Definitions & Roles](#7-agent-definitions--roles)

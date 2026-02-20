@@ -329,7 +329,7 @@ export default function AnalysisPage({ params }: { params: { id: string } }) {
   const [activeTab, setActiveTab] = useState<"overview" | "findings" | "cloud" | "deploy" | "trace">("overview");
 
   const token   = typeof window !== "undefined" ? sessionStorage.getItem("access_token") : null;
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL;
 
   const fetchLogs = useCallback(async () => {
     if (!token) return;
