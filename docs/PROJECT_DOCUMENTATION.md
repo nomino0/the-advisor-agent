@@ -9,6 +9,7 @@
 1. [Executive Summary](#1-executive-summary)
 2. [Problem Statement](#2-problem-statement)
 3. [Solution Overview](#3-solution-overview)
+4. [Production Security & Infrastructure Hardening](#4-production-security--infrastructure-hardening)
 5. [Platform Architecture](#5-platform-architecture)
 6. [Multi-Agent System Design](#6-multi-agent-system-design)
 7. [Agent Definitions & Roles](#7-agent-definitions--roles)
@@ -153,316 +154,35 @@ CloudWise AI is the **cloud expert your small team can actually afford**. It is:
 
 ---
 
-## 4. Monetization & Pricing Model
+## 4. Production Security & Infrastructure Hardening
 
-### 4.1 Business Model Overview
+To protect both our intellectual property and our users' code, CloudWise AI employs a multi-layered security and resilience strategy that operates at the edge, the backend, and the client.
 
-CloudWise AI operates on a **freemium + pay-per-project + subscription** hybrid model designed to be accessible to solo developers while scaling revenue with larger teams and heavier usage.
+### 4.1 Cloudflare Edge Protection & Anti-DDoS
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    CloudWise AI Pricing Tiers                        │
-│                                                                     │
-│  ┌───────────────┐  ┌───────────────┐  ┌───────────────────────┐   │
-│  │  FREE PEEK    │  │  PAY-PER-     │  │  MONTHLY              │   │
-│  │               │  │  PROJECT      │  │  SUBSCRIPTION         │   │
-│  │  • Summary    │  │               │  │                       │   │
-│  │    scores     │  │  • Full       │  │  • Unlimited          │   │
-│  │  • Top 3      │  │    report     │  │    analyses           │   │
-│  │    findings   │  │  • All 7      │  │  • Priority           │   │
-│  │  • Basic      │  │    pillars    │  │    processing         │   │
-│  │    cloud hint │  │  • Cloud      │  │  • Team features      │   │
-│  │               │  │    configs    │  │  • API access          │   │
-│  │  FREE         │  │  • Deploy     │  │  • Custom RAG docs    │   │
-│  │               │  │    guide      │  │                       │   │
-│  │               │  │  • PDF export │  │  Starting $29/mo      │   │
-│  │               │  │               │  │                       │   │
-│  │               │  │  From $4.99   │  │                       │   │
-│  └───────────────┘  └───────────────┘  └───────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
-```
+Before any traffic hits the CloudWise AI gateway, it is heavily filtered and scrubbed at the edge to prevent abuse and ensure high availability.
 
-### 4.2 Free Tier — "Sneak Peek"
+- **DDoS Mitigation:** We utilize Cloudflare's unmetered DDoS protection to automatically ingest and drop malformed packets, syn floods, and volumetric layer 3/4 attacks.
+- **WAF (Web Application Firewall):** A strict managed ruleset blocks common OWASP Top 10 vectors (SQLi, XSS, Path Traversal) before they ever reach our FastAPI application.
+- **Bot Management & Rate Limiting:** We employ Cloudflare Turnstile (a privacy-preserving CAPTCHA alternative) on all authentication endpoints (`/login`, `/register`). This prevents automated credential stuffing and bot-driven API abuse.
+- **Edge Caching:** Static frontend assets and basic RAG document queries are aggressively cached at edge nodes, drastically reducing origin load and speeding up initial P2P connections.
 
-Every user gets a **free preview** for each analysis to demonstrate value before asking for payment:
+### 4.2 Client-Side Anti-Spoofing & State Security
 
-| What's Included (Free) | What's Locked (Paid) |
-|---|---|
-| Overall score (e.g., 72/100 — Grade B) | Per-pillar detailed breakdown |
-| Top 3 most critical findings (summary only) | Full findings list with code locations |
-| 1-line cloud provider recommendation ("GCP is best for your app") | Full provider comparison table + cost projections |
-| Security risk level (HIGH / MEDIUM / LOW) | Complete vulnerability report with remediation steps |
-| — | Step-by-step deployment guide |
-| — | Architecture diagrams and graphs |
-| — | PDF export |
-| — | Re-analysis capability |
+Modern Single Page Applications (SPAs) are inherently vulnerable to client-side state manipulation. A malicious user could open browser developer tools and inject `"role": "admin"` or `"totp_enabled": true` into local storage to force UI route bypasses. CloudWise defeats this using a "Zero Trust Client" architecture:
 
-**Conversion Strategy:** The free peek gives users enough to understand the value. They see their score, see that critical issues exist, see which cloud is best — but need to pay to get the *actionable details* that actually save them money.
+1. **Cryptographic Identity Verification:** The Next.js Edge Middleware flatly ignores manually editable JSON browser cookies. It extracts the strictly `HttpOnly` protected `access_token`, decodes the Base64Url payload, and extracts the cryptographically signed `role`. Any attempt to spoof the payload invalidates the signature, explicitly blocking the attacker from protected routes (like `/admin`).
+2. **Backend-Synchronous Overrides:** On page hydration, the React frontend silently polls `/api/v1/auth/me`. If a user injects falsified data (e.g., claiming Two-Factor Authentication is active) into `sessionStorage`, the backend's source of truth aggressively over-writes the browser's state and forces an eviction to genuine security checkpoints.
+3. **Graceful Error Ejection:** The global API client (`api.ts`) safely intercepts all `403 Forbidden` API responses. Attempts to brute-force UI states instantly trigger programmatic eviction, scrubbing the session memory and routing the attacker safely to unprivileged dashboards.
+4. **Hardened Loop-Breaking Logout:** Logging out of the application dispatches an immediate API signal command that instructs the backend payload to return `Set-Cookie` headers with past expiration dates, forcefully instructing the browser to scrub restricted `HttpOnly` cookies.
 
-### 4.3 Pay-Per-Project Pricing
+### 4.3 Email Validation & Identity Verification
 
-Pricing is based on **project size** (measured by files and lines of code) and **processing cost** (LLM tokens consumed, agent compute time):
+To prevent garbage registrations and ensure a high-signal user base, we implement rigorous identity checks.
 
-| Tier | Project Size | Files | Lines of Code | Price | What's Included |
-|---|---|---|---|---|---|
-| **Micro** | Very small | 1–20 files | < 2,000 LOC | **$4.99** | Full report, all pillars, cloud config, deploy guide |
-| **Small** | Small app | 21–50 files | 2,000–10,000 LOC | **$9.99** | Everything in Micro + more detailed analysis |
-| **Medium** | Standard app | 51–150 files | 10,000–50,000 LOC | **$19.99** | Everything in Small + architecture diagrams |
-| **Large** | Large app | 151–500 files | 50,000–200,000 LOC | **$39.99** | Everything in Medium + priority processing |
-| **Enterprise** | Very large | 500+ files | 200,000+ LOC | **Custom** | Contact us for enterprise pricing |
-
-**How We Calculate Cost:**
-```python
-def calculate_project_price(project_metrics: ProjectMetrics) -> Price:
-    """
-    Pricing formula considers:
-    1. Base tier price (from size table above)
-    2. Complexity multiplier (high cyclomatic complexity = more agent work)
-    3. Language count multiplier (polyglot projects need more analysis)
-    4. Our actual cost (LLM tokens + compute + margin)
-    """
-    base_price = get_tier_price(project_metrics.loc, project_metrics.file_count)
-    complexity_factor = 1.0 + (project_metrics.avg_complexity - 10) * 0.02  # cap at 1.5x
-    language_factor = 1.0 + (project_metrics.language_count - 1) * 0.1     # cap at 1.5x
-    
-    final_price = base_price * min(complexity_factor, 1.5) * min(language_factor, 1.5)
-    return round_to_nearest(final_price, 0.99)  # e.g., $12.99, $24.99
-```
-
-### 4.4 Monthly Subscription Plans
-
-| Plan | Price | Analyses/Month | Team Members | Features |
-|---|---|---|---|---|
-| **Starter** | **$29/mo** | 5 full analyses | 1 user | Full reports, PDF export, email support |
-| **Pro** | **$79/mo** | 20 full analyses | Up to 5 users | Everything in Starter + API access, priority queue, GitHub/GitLab integration |
-| **Team** | **$149/mo** | 50 full analyses | Up to 15 users | Everything in Pro + custom RAG docs, team dashboard, Slack integration |
-| **Enterprise** | **Custom** | Unlimited | Unlimited | Everything in Team + SSO, SLA, dedicated support, on-premise option |
-
-**Subscription Benefits vs. Pay-Per-Project:**
-- **Cost savings**: Subscribers save 30–50% compared to per-project pricing at the same volume
-- **Priority processing**: Subscribers get faster analysis (queue priority)
-- **Team collaboration**: Shared project history, team dashboards
-- **API access**: Programmatic access for CI/CD integration (Pro+)
-- **Rollover**: Unused analyses roll over for 1 month (max 2x monthly limit)
-
-### 4.5 Revenue Projections
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Revenue Model (Conservative Estimates)                       │
-│                                                              │
-│  Month 1-3 (Launch):                                         │
-│  • 500 free users, 50 paid analyses/mo                       │
-│  • 10 Starter subscriptions                                  │
-│  • Revenue: ~$790/mo + $290/mo = ~$1,080/mo                  │
-│                                                              │
-│  Month 6:                                                    │
-│  • 2,000 free users, 200 paid analyses/mo                    │
-│  • 30 Starter + 10 Pro subscriptions                         │
-│  • Revenue: ~$3,160/mo + $1,660/mo = ~$4,820/mo              │
-│                                                              │
-│  Month 12:                                                   │
-│  • 8,000 free users, 500 paid analyses/mo                    │
-│  • 80 Starter + 30 Pro + 10 Team subscriptions               │
-│  • Revenue: ~$7,900/mo + $5,180/mo = ~$13,080/mo             │
-│                                                              │
-│  Our Costs Per Analysis:                                     │
-│  • LLM tokens (GPT-4o): ~$0.30–$1.50 per analysis           │
-│  • Compute (ephemeral container): ~$0.05–$0.15               │
-│  • Infrastructure (amortized): ~$0.10                        │
-│  • Total cost per analysis: ~$0.45–$1.75                     │
-│  • Margin per paid analysis: 60–85%                          │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### 4.6 Payment UX Flow
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Payment Flow                              │
-│                                                              │
-│  Step 1: User runs analysis                                  │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  Analysis complete! Your score: 72/100 (B)           │    │
-│  │                                                      │    │
-│  │  🔓 FREE PREVIEW:                                    │    │
-│  │  • Overall score: 72/100                             │    │
-│  │  • Top issues: 3 CRITICAL security findings          │    │
-│  │  • Best provider: GCP (Cloud Run)                    │    │
-│  │                                                      │    │
-│  │  🔒 UNLOCK FULL REPORT ($9.99):                      │    │
-│  │  • 47 detailed findings across 7 pillars             │    │
-│  │  • Complete cloud config + cost projections           │    │
-│  │  • Step-by-step GCP deployment guide                 │    │
-│  │  • Security remediation instructions                 │    │
-│  │  • PDF export                                        │    │
-│  │                                                      │    │
-│  │  [💳 Unlock Report — $9.99]  [📦 See Plans]          │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                              │
-│  Step 2: Payment                                             │
-│  ┌──────────────────────────────────────────────────────┐    │
-│  │  Secure checkout (Stripe)                            │    │
-│  │                                                      │    │
-│  │  Card: •••• •••• •••• 4242                           │    │
-│  │  [Apple Pay]  [Google Pay]  [PayPal]                 │    │
-│  │                                                      │    │
-│  │  ☑ Save card for future purchases                    │    │
-│  │                                                      │    │
-│  │  💡 Save 40%! Get the Starter plan for $29/mo        │    │
-│  │     (includes 5 analyses)                            │    │
-│  │                                                      │    │
-│  │  [Pay $9.99]                                         │    │
-│  └──────────────────────────────────────────────────────┘    │
-│                                                              │
-│  Step 3: Instant access                                      │
-│  → Full report unlocked immediately                          │
-│  → PDF download available                                    │
-│  → Receipt sent to email                                     │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### 4.7 Secure Payment Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                  Payment Security Architecture                   │
-│                                                                  │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │  PCI DSS Compliance — We NEVER touch raw card data        │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                  │
-│  User ──→ Stripe.js (client-side) ──→ Stripe API ──→ Our API   │
-│           Card info goes DIRECTLY      Tokenized     We only    │
-│           to Stripe, never our         payment       receive    │
-│           servers                      intent        payment    │
-│                                                      confirmation│
-│                                                                  │
-│  Payment Flow:                                                   │
-│  1. Frontend creates Stripe PaymentIntent via our backend       │
-│  2. Stripe.js collects card data (never hits our server)        │
-│  3. Stripe processes payment, returns confirmation              │
-│  4. Our webhook receives payment_succeeded event                │
-│  5. We unlock the report for the user                           │
-│  6. Receipt generated and emailed                               │
-│                                                                  │
-│  Security Measures:                                              │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  ✅ PCI DSS Level 1 compliance (via Stripe)             │   │
-│  │  ✅ No card data stored on our servers (EVER)           │   │
-│  │  ✅ Stripe.js tokenization (client-side encryption)     │   │
-│  │  ✅ Webhook signature verification (HMAC-SHA256)        │   │
-│  │  ✅ Idempotency keys (prevent double charges)           │   │
-│  │  ✅ TLS 1.3 for all payment communication               │   │
-│  │  ✅ 3D Secure 2.0 (SCA) for European card payments     │   │
-│  │  ✅ Fraud detection via Stripe Radar                    │   │
-│  │  ✅ Automatic refund policy (within 7 days)             │   │
-│  │  ✅ Payment audit logging (all transactions recorded)   │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 4.8 Subscription Management
-
-```python
-# Subscription lifecycle managed via Stripe Billing
-class SubscriptionService:
-    """
-    Handles:
-    - Plan creation and upgrades/downgrades
-    - Billing cycle management (monthly)
-    - Usage tracking (analyses consumed this period)
-    - Overage handling (soft limit + notification)
-    - Cancellation with prorated refund
-    - Failed payment retry (3 attempts over 7 days)
-    - Dunning management (email reminders for failed payments)
-    - Invoice generation and history
-    """
-    
-    async def create_subscription(self, user_id: str, plan: str) -> Subscription:
-        # 1. Create Stripe Customer (if not exists)
-        # 2. Attach payment method
-        # 3. Create Stripe Subscription
-        # 4. Store subscription record in our DB
-        # 5. Grant plan permissions immediately
-        pass
-    
-    async def check_analysis_quota(self, user_id: str) -> QuotaStatus:
-        # Returns: remaining analyses, rollover count, overage options
-        pass
-    
-    async def handle_webhook(self, event: StripeEvent) -> None:
-        # Handle: payment_succeeded, payment_failed, 
-        #         subscription_updated, subscription_canceled,
-        #         invoice_payment_failed
-        pass
-```
-
-### 4.9 Payment API Endpoints
-
-```
-Payments & Billing
-  POST   /api/v1/payments/create-intent       Create payment intent (per-project)
-  POST   /api/v1/payments/confirm              Confirm payment
-  GET    /api/v1/payments/history              User payment history
-  GET    /api/v1/payments/invoices             List invoices
-  GET    /api/v1/payments/invoices/{id}/pdf    Download invoice PDF
-  
-Subscriptions
-  GET    /api/v1/subscriptions/plans           List available plans
-  POST   /api/v1/subscriptions/create          Create subscription
-  PUT    /api/v1/subscriptions/update          Upgrade/downgrade plan
-  DELETE /api/v1/subscriptions/cancel          Cancel subscription
-  GET    /api/v1/subscriptions/current         Get current subscription + usage
-  GET    /api/v1/subscriptions/usage           Get analysis usage this period
-  
-Webhooks (Internal — Stripe → Our API)
-  POST   /api/v1/webhooks/stripe               Stripe webhook handler
-
-Admin — Revenue
-  GET    /api/v1/admin/revenue/dashboard       Revenue metrics
-  GET    /api/v1/admin/revenue/transactions    All transactions
-  POST   /api/v1/admin/revenue/refund          Issue refund
-  GET    /api/v1/admin/revenue/mrr             Monthly recurring revenue
-  GET    /api/v1/admin/revenue/churn           Churn metrics
-```
-
-### 4.10 Admin Revenue Dashboard
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Revenue Dashboard                          [Admin Panel]    │
-│                                                              │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
-│  │ MRR         │ │ Revenue     │ │ Churn Rate  │           │
-│  │ $4,820      │ │ (This Month)│ │   3.2%      │           │
-│  │ ▲ +18%      │ │ $6,480      │ │ ▼ -0.5%     │           │
-│  └─────────────┘ └─────────────┘ └─────────────┘           │
-│                                                              │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐           │
-│  │ Paying Users│ │ Avg Revenue │ │ Cost/Analysis│           │
-│  │    127      │ │ Per User    │ │   $0.92      │           │
-│  │ ▲ +22%      │ │ $51.02      │ │ ▼ -8%        │           │
-│  └─────────────┘ └─────────────┘ └─────────────┘           │
-│                                                              │
-│  Revenue Breakdown                                           │
-│  ┌────────────────────────────┬──────────┬────────────────┐  │
-│  │ Source                     │ Amount   │ % of Revenue   │  │
-│  ├────────────────────────────┼──────────┼────────────────┤  │
-│  │ Pay-per-project            │ $3,160   │ 48.8%          │  │
-│  │ Starter subscriptions (30) │ $870     │ 13.4%          │  │
-│  │ Pro subscriptions (10)     │ $790     │ 12.2%          │  │
-│  │ Team subscriptions (10)    │ $1,490   │ 23.0%          │  │
-│  │ Enterprise                 │ $170     │ 2.6%           │  │
-│  └────────────────────────────┴──────────┴────────────────┘  │
-│                                                              │
-│  Conversion Funnel                                           │
-│  Free Users: 2,000 → Paid Once: 200 (10%) → Subscribers:    │
-│  50 (2.5%) → Team/Enterprise: 10 (0.5%)                     │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
+- **MX Record Verification:** Every registration passes through the Python `email-validator` library. Beyond syntax checks, we instantly query the domain's MX (Mail Exchange) records. If a domain cannot technically receive mail, the registration is rejected.
+- **Cryptographic Verification Links:** Upon registration, users are e-mailed a time-bounded JWT verification token. They cannot interact with the multi-agent pipeline or perform analysis until this token is redeemed.
+- **Two-Factor Authentication (TOTP):** Upon successful verification, users are strictly routed to pair an authenticator app (Google Authenticator, Authy). Our pipeline will refuse to execute core logic unless a valid 2FA token sequence has been established.
 
 ## 5. Platform Architecture
 
