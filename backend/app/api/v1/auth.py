@@ -327,15 +327,30 @@ async def login_2fa(
 @router.post("/logout", response_model=MessageResponse)
 async def logout(
     request: Request,
-    current_user: User = Depends(get_current_user),
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    """Logout the current user. (Client should discard tokens.)"""
-    await record_audit(
-        db, action="user.logout", user_id=current_user.id,
-        resource="auth", details="User logged out",
-        ip_address=_get_client_ip(request),
-    )
+    """Logout the current user and aggressively clear cookies from the browser."""
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        payload = decode_token(auth_header.split(" ")[1])
+        if payload and payload.get("sub"):
+            try:
+                await record_audit(
+                    db, action="user.logout", user_id=payload.get("sub"),
+                    resource="auth", details="User logged out",
+                    ip_address=_get_client_ip(request),
+                )
+            except Exception:
+                pass
+
+    # Clear HttpOnly secure cookies
+    response.delete_cookie(key="access_token", path="/", httponly=True, samesite="Strict", secure=True)
+    response.delete_cookie(key="refresh_token", path="/", httponly=True, samesite="Strict", secure=True)
+    # Also clear any plaintext fallback cookies just in case
+    response.delete_cookie(key="access_token", path="/", secure=True)
+    response.delete_cookie(key="user", path="/", secure=True)
+    
     return MessageResponse(message="Logged out successfully. Please discard your tokens.")
 
 

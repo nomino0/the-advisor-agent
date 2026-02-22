@@ -41,8 +41,14 @@ export async function api(endpoint: string, options: ApiOptions = {}) {
       // other 403s maybe "email not verified" so just don't log out.
     } else {
       // 401 Unauthorized handling
-      const skipSessionExpired = endpoint === "/api/v1/auth/login" || endpoint === "/api/v1/auth/register" || endpoint.includes("/auth/verify-email") || endpoint.includes("/auth/resend") || endpoint.includes("/auth/2fa");
+      const skipSessionExpired = endpoint === "/api/v1/auth/login" || endpoint === "/api/v1/auth/register" || endpoint.includes("/auth/verify-email") || endpoint.includes("/auth/resend") || endpoint.includes("/auth/2fa") || endpoint === "/api/v1/auth/logout";
       if (!skipSessionExpired) {
+        // Attempt to clear HttpOnly cookies securely using the backend
+        await fetch(`${API_URL}/api/v1/auth/logout`, {
+          method: "POST",
+          headers: token ? { "Authorization": `Bearer ${token}` } : {}
+        }).catch(() => { });
+
         sessionStorage.removeItem("access_token");
         sessionStorage.removeItem("refresh_token");
         sessionStorage.removeItem("user");

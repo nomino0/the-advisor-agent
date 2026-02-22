@@ -133,10 +133,18 @@ export function useAuth(options: { requireAuth?: boolean; requireAdmin?: boolean
     return () => { mounted = false; };
   }, [requireAuth, requireAdmin, router, pathname]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    if (token) {
+      try {
+        const { api } = await import("@/lib/api");
+        await api("/api/v1/auth/logout", { method: "POST", token });
+      } catch (err) {
+        // Ignore network or 401 errors during logout, we want to clear local state regardless
+      }
+    }
     clearAuth();
-    router.push("/login");
-  }, [router]);
+    router.push("/");
+  }, [router, token]);
 
   const isAdmin = user?.role === "admin";
 
