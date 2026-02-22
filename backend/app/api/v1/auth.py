@@ -17,9 +17,20 @@ from app.schemas.auth import (
     TwoFactorVerifyRequest,
     MessageResponse,
     TokenRefreshRequest,
+    ResendVerificationRequest,
 )
 from app.security.password import hash_password, verify_password
-from app.security.jwt import create_access_token, create_refresh_token, create_2fa_pending_token, create_trusted_device_token, decode_token
+from app.security.jwt import (
+    create_access_token,
+    create_refresh_token,
+    create_2fa_pending_token,
+    create_trusted_device_token,
+    create_email_verification_token,
+    decode_token,
+)
+from app.security.captcha import verify_captcha
+import logging
+from app.config import settings
 from app.security.totp import generate_totp_secret, get_totp_uri, generate_qr_code_base64, verify_totp
 from app.api.dependencies import get_current_user
 from app.services.audit_service import record_audit
@@ -42,13 +53,17 @@ def _user_response(user: User, github_connected: bool = False) -> UserResponse:
         full_name=user.full_name,
         role=user.role.value if isinstance(user.role, UserRole) else user.role,
         is_active=user.is_active,
+        email_verified=getattr(user, "email_verified", False),
         totp_enabled=user.totp_enabled,
         github_connected=github_connected,
         created_at=user.created_at.isoformat(),
     )
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+from app.schemas.auth import RegisterResponse
+
+
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
 async def register(
     request_body: RegisterRequest,
@@ -56,6 +71,9 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ):
     """Register a new user."""
+    # Verify captcha first
+    if not await verify_captcha(request_body.captcha_token, _get_client_ip(request)):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Captcha verification failed")
     result = await db.execute(select(User).where(User.email == request_body.email))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -63,11 +81,20 @@ async def register(
             detail="Email already registered",
         )
 
+    # Validate password strength
+    from app.security.password import validate_password_strength
+
+    ok, msg = validate_password_strength(request_body.password)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=msg)
+
     user = User(
         email=request_body.email,
         password_hash=hash_password(request_body.password),
         full_name=request_body.full_name,
         role=UserRole.USER,
+        is_active=False,  # require email verification before activating
+        email_verified=False,
     )
     db.add(user)
     await db.flush()
@@ -79,7 +106,35 @@ async def register(
         ip_address=_get_client_ip(request),
     )
 
-    return _user_response(user)
+    # Generate email verification token and send verification link (logged for now)
+    email_sent = False
+    verification_url = None
+    try:
+        token = create_email_verification_token({"sub": str(user.id), "email": user.email})
+        # Build verification URL using configured frontend or backend fallback
+        base = settings.frontend_url or f"{request.url.scheme}://{request.url.hostname}:{settings.backend_port}"
+        verification_url = f"{base.rstrip('/')}/verify-email?token={token}"
+
+        # Send email (best-effort). Falls back to logging if send fails.
+        from app.emailer import send_verification_email
+
+        sent = await send_verification_email(user.email, verification_url, subject="Verify your CloudWise AI account")
+        logger = logging.getLogger(__name__)
+        email_sent = bool(sent)
+        if not sent:
+            logger.info("Verification link for %s (send failed or not configured): %s", user.email, verification_url)
+
+        await record_audit(
+            db, action="user.register_email_sent", user_id=user.id,
+            resource="auth", details="Sent email verification link (attempted)",
+            ip_address=_get_client_ip(request),
+        )
+    except Exception:
+        # Don't fail registration on email-send issues, but log.
+        logger = logging.getLogger(__name__)
+        logger.exception("Failed to generate/send email verification token for %s", user.email)
+
+    return RegisterResponse(user=_user_response(user), email_sent=email_sent, verification_url=verification_url)
 
 
 @router.post("/login")
@@ -91,6 +146,13 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """Login with email and password. Returns tokens directly or requires 2FA."""
+    # Verify captcha first
+    if not await verify_captcha(request_body.captcha_token, _get_client_ip(request)):
+        await record_audit(
+            db, action="user.login_captcha_failed", resource="auth",
+            details=f"Captcha failed for: {request_body.email}", ip_address=_get_client_ip(request),
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Captcha verification failed")
     result = await db.execute(select(User).where(User.email == request_body.email))
     user = result.scalar_one_or_none()
 
@@ -108,7 +170,7 @@ async def login(
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated",
+            detail="Please activate your email first",
         )
 
     # Update last login (naive UTC to match TIMESTAMP WITHOUT TIME ZONE column)
@@ -149,6 +211,24 @@ async def login(
     token_data = {"sub": str(user.id), "email": user.email, "role": user.role.value if isinstance(user.role, UserRole) else user.role}
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
+
+    # Set tokens as secure cookies
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="Strict",
+        max_age=1800
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="Strict",
+        max_age=604800
+    )
 
     await record_audit(
         db, action="user.login", user_id=user.id,
@@ -208,14 +288,32 @@ async def login_2fa(
             value=trusted_token,
             max_age=60 * 60 * 24 * 7,  # 7 days
             httponly=True,
-            samesite="lax",
-            secure=False, # Set True in prod
+            samesite="Lax",
+            secure=True, # Always secure in prod
         )
 
     await record_audit(
         db, action="user.login_2fa_complete", user_id=user.id,
         resource="auth", details="2FA login completed successfully",
         ip_address=_get_client_ip(request),
+    )
+
+    # Set tokens as secure cookies
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="Strict",
+        max_age=1800
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="Strict",
+        max_age=604800
     )
 
     return LoginResponse(
@@ -241,6 +339,74 @@ async def logout(
     return MessageResponse(message="Logged out successfully. Please discard your tokens.")
 
 
+
+@router.get("/verify-email", response_model=MessageResponse)
+async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
+    """Verify email using a short-lived token (query param `token`)."""
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "email_verification":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
+
+    result = await db.execute(select(User).where(User.id == payload["sub"]))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.email_verified = True
+    user.is_active = True
+    await db.flush()
+
+    await record_audit(
+        db, action="user.email_verified", user_id=user.id,
+        resource="auth", details="User verified email and activated account",
+        ip_address="system",
+    )
+
+    return MessageResponse(message="Email verified successfully. You can now log in.")
+
+
+@router.post("/resend-verification", response_model=MessageResponse)
+@limiter.limit("3/hour")
+async def resend_verification(
+    request_body: "ResendVerificationRequest",
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Resend email verification link for a given email."""
+    from app.schemas.auth import ResendVerificationRequest
+
+    result = await db.execute(select(User).where(User.email == request_body.email))
+    user = result.scalar_one_or_none()
+    if not user:
+        # Avoid leaking whether an email is registered
+        return MessageResponse(message="If the email exists, a verification link was sent.")
+
+    if user.email_verified:
+        return MessageResponse(message="Email already verified.")
+
+    try:
+        token = create_email_verification_token({"sub": str(user.id), "email": user.email})
+        base = settings.frontend_url or f"{request.url.scheme}://{request.url.hostname}:{settings.backend_port}"
+        verification_url = f"{base.rstrip('/')}/verify-email?token={token}"
+        from app.emailer import send_verification_email
+
+        sent = await send_verification_email(user.email, verification_url, subject="Verify your CloudWise AI account")
+        logger = logging.getLogger(__name__)
+        if not sent:
+            logger.info("Resent verification link for %s (send failed or not configured): %s", user.email, verification_url)
+
+        await record_audit(
+            db, action="user.resend_verification", user_id=user.id,
+            resource="auth", details="Resent email verification link (attempted)",
+            ip_address=_get_client_ip(request),
+        )
+    except Exception:
+        logger = logging.getLogger(__name__)
+        logger.exception("Failed to resend email verification for %s", user.email)
+
+    return MessageResponse(message="If the email exists, a verification link was sent.")
+
+
 @router.post("/refresh", response_model=LoginResponse)
 async def refresh_token(request_body: TokenRefreshRequest, db: AsyncSession = Depends(get_db)):
     """Refresh an access token."""
@@ -260,6 +426,25 @@ async def refresh_token(request_body: TokenRefreshRequest, db: AsyncSession = De
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
 
+    # Set tokens as secure cookies
+    from fastapi import Response
+    response = Response()
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=True,
+        samesite="Strict",
+        max_age=1800
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,
+        samesite="Strict",
+        max_age=604800
+    )
     return LoginResponse(
         access_token=access_token,
         refresh_token=refresh_token,

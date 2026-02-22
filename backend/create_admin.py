@@ -1,9 +1,13 @@
 ﻿import asyncio
 import uuid
+import logging
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
 from app.security.password import hash_password
 from sqlalchemy import select
+
+logger = logging.getLogger("cloudwise")
+
 
 async def main():
     async with AsyncSessionLocal() as db:
@@ -12,11 +16,11 @@ async def main():
         user = result.scalar_one_or_none()
         
         if user:
-            print(f'User {email} already exists.')
+            logger.info('User %s already exists.', email)
             if user.role != 'admin':
                 user.role = 'admin'
                 await db.commit()
-                print(f'Updated {email} to admin role.')
+                logger.info('Updated %s to admin role.', email)
         else:
             new_admin = User(
                 id=uuid.uuid4(),
@@ -28,7 +32,8 @@ async def main():
             )
             db.add(new_admin)
             await db.commit()
-            print(f'Created new admin user: {email}')
+            logger.info('Created new admin user: %s', email)
+
 
 if __name__ == '__main__':
     asyncio.run(main())

@@ -14,8 +14,11 @@ from app.schemas.knowledge_base import (
     KnowledgeBaseSourceUpdate,
 )
 from app.services.crawler_service import CrawlerService
+import logging
 
 router = APIRouter()
+
+logger = logging.getLogger("cloudwise")
 
 @router.get("/", response_model=list[KnowledgeBaseSourceResponse])
 async def list_knowledge_bases(
@@ -74,7 +77,7 @@ async def run_kb_processing(kb_id: UUID):
                 kb.updated_at = datetime.utcnow()
                 await db.commit()
         except Exception as e:
-            print(f"Error processing KB {kb_id}: {e}")
+            logger.exception("Error processing KB %s", kb_id)
             # Try to update status if possible
             try:
                 # Need to fetch again or rollback if transaction failed
@@ -85,7 +88,7 @@ async def run_kb_processing(kb_id: UUID):
                     kb.status = "failed"
                     await db.commit()
             except Exception as e2:
-                print(f"Error handling failure for KB {kb_id}: {e2}")
+                logger.exception("Error handling failure for KB %s: %s", kb_id, e2)
 
 @router.post("/{kb_id}/process", response_model=KnowledgeBaseSourceResponse)
 async def process_knowledge_base(

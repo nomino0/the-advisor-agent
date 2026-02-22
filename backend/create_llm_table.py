@@ -1,11 +1,8 @@
 import asyncio
 from sqlalchemy import text
-# import structlog
 import logging
 
-# Simple logger setup for standalone script
-# logger = structlog.get_logger()
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("cloudwise")
 
 from app.db.session import engine
 
@@ -39,19 +36,19 @@ async def create_table():
             existing_columns = [row[0] for row in result.fetchall()]
             
             if 'provider_type' not in existing_columns:
-                print("Adding provider_type column...")
+                logger.info("Adding provider_type column...")
                 await conn.execute(text("ALTER TABLE llm_providers ADD COLUMN provider_type VARCHAR DEFAULT 'openai';"))
-                
+
             if 'priority' not in existing_columns:
-                print("Adding priority column...")
+                logger.info("Adding priority column...")
                 await conn.execute(text("ALTER TABLE llm_providers ADD COLUMN priority INTEGER DEFAULT 10;"))
 
             if 'agent_capability' not in existing_columns:
-                print("Adding agent_capability column...")
+                logger.info("Adding agent_capability column...")
                 await asyncio.sleep(0.1) # Let previous ops finish
                 await conn.execute(text("ALTER TABLE llm_providers ADD COLUMN agent_capability JSONB DEFAULT '[\"general\"]'::jsonb;"))
 
-        print("Table llm_providers is up to date.")
+        logger.info("Table llm_providers is up to date.")
         
         # Seed Groq if table empty
         async with engine.begin() as conn:
@@ -59,7 +56,7 @@ async def create_table():
             count = result.scalar()
             
             # Always update Groq provider to latest model and API key from .env
-            print("Updating Groq-Kimi provider from .env...")
+            logger.info("Updating Groq-Kimi provider from .env...")
             from app.config import settings
             key = settings.groq_api_key
             if key:
@@ -80,12 +77,12 @@ async def create_table():
                         '["general", "security", "planner"]'::jsonb
                     );
                 """), {"api_key": key})
-                print("Updated Groq provider with moonshotai/kimi-k2-instruct-0905 model.")
+                logger.info("Updated Groq provider with moonshotai/kimi-k2-instruct-0905 model.")
             else:
-                print("No Groq key in settings.")
+                logger.info("No Groq key in settings.")
 
     except Exception as e:
-        print(f"Error creating/updating table: {e}")
+        logger.error("Error creating/updating table: %s", e)
 
 if __name__ == "__main__":
     asyncio.run(create_table())

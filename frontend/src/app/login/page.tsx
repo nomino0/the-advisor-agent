@@ -11,7 +11,6 @@ import { saveAuth, getToken, getUser } from "@/hooks/useAuth";
 export default function LoginPage() {
   const router = useRouter();
 
-  // If already logged in, redirect immediately
   useEffect(() => {
     const token = getToken();
     const user = getUser();
@@ -19,37 +18,51 @@ export default function LoginPage() {
       router.replace(user.role === "admin" ? "/admin" : "/dashboard");
     }
   }, [router]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [pendingCaptchaSubmit, setPendingCaptchaSubmit] = useState(false);
 
-  // 2FA challenge state
   const [requires2FA, setRequires2FA] = useState(false);
   const [pendingToken, setPendingToken] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const [trustDevice, setTrustDevice] = useState(false);
 
-  // ── handleSubmit (Email/Password) ──────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    const siteKey =
+      process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
+      process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
+    if (siteKey && (!captchaToken || captchaToken.length < 10)) {
+      const rendered = renderTurnstileWidget();
+      (window as any).__pendingCaptchaSubmit = true;
+      setPendingCaptchaSubmit(true);
+      if (!rendered) {
+        toast.error("CAPTCHA failed to load. Try reloading the page.");
+      } else {
+        toast("Please complete the CAPTCHA to continue");
+      }
+      return;
+    }
 
+    setLoading(true);
     try {
       const data = await api("/api/v1/auth/login", {
         method: "POST",
-        body: { email, password },
+        body: { email, password, captcha_token: captchaToken },
       });
-
       if (data.requires_2fa) {
         setRequires2FA(true);
         setPendingToken(data.pending_token);
-        // Clean up password from state for security
         setPassword("");
         toast.success("Please enter your 2FA code");
       } else {
         saveAuth(data);
         toast.success("Logged in successfully");
-        const redirectPath = data.user?.role === "admin" ? "/admin" : "/dashboard";
+        const redirectPath =
+          data.user?.role === "admin" ? "/admin" : "/dashboard";
         router.push(redirectPath);
       }
     } catch (err: any) {
@@ -59,25 +72,104 @@ export default function LoginPage() {
     }
   };
 
-  // ── handle2FASubmit (TOTP Code) ──────────────────────────────────────────
+  useEffect(() => {
+    (window as any).__setTurnstileToken = (t: string) => setCaptchaToken(t);
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    if (!siteKey)
+      return () => {
+        (window as any).__setTurnstileToken = undefined;
+      };
+
+    const src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    let scriptEl = document.querySelector(
+      `script[src="${src}"]`,
+    ) as HTMLScriptElement | null;
+    if (!scriptEl) {
+      scriptEl = document.createElement("script");
+      scriptEl.src = src;
+      scriptEl.async = true;
+      scriptEl.defer = true;
+        // Render widget once the script loads so users can interact immediately
+        scriptEl.onload = () => renderTurnstileWidget();
+        document.body.appendChild(scriptEl);
+        // Small retry in case turnstile isn't available instantly
+        setTimeout(() => renderTurnstileWidget(), 500);
+    }
+
+    return () => {
+      (window as any).__setTurnstileToken = undefined;
+    };
+  }, []);
+
+  const renderTurnstileWidget = () => {
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    if (!siteKey) return false;
+    try {
+      if ((window as any).turnstile) {
+        const container = document.getElementById("turnstile-widget");
+        if (container) container.innerHTML = "";
+        (window as any).turnstile.render("#turnstile-widget", {
+          sitekey: siteKey,
+          callback: function (token: string) {
+            (window as any).__setTurnstileToken &&
+              (window as any).__setTurnstileToken(token);
+          },
+        });
+        return true;
+      }
+    } catch (e) {
+      console.warn("turnstile render error", e);
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    if (captchaToken && pendingCaptchaSubmit) {
+      setPendingCaptchaSubmit(false);
+      (async () => {
+        setLoading(true);
+        try {
+          const data = await api("/api/v1/auth/login", {
+            method: "POST",
+            body: { email, password, captcha_token: captchaToken },
+          });
+          if (data.requires_2fa) {
+            setRequires2FA(true);
+            setPendingToken(data.pending_token);
+            setPassword("");
+            toast.success("Please enter your 2FA code");
+          } else {
+            saveAuth(data);
+            toast.success("Logged in successfully");
+            const redirectPath =
+              data.user?.role === "admin" ? "/admin" : "/dashboard";
+            router.push(redirectPath);
+          }
+        } catch (err: any) {
+          toast.error(err.message || "Login failed");
+        } finally {
+          setLoading(false);
+        }
+      })();
+    }
+  }, [captchaToken, pendingCaptchaSubmit]);
+
   const handle2FASubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
-      // Send the trust_device flag if checked
       const data = await api("/api/v1/auth/2fa/login", {
         method: "POST",
-        body: { 
-          pending_token: pendingToken, 
+        body: {
+          pending_token: pendingToken,
           totp_code: totpCode,
-          trust_device: trustDevice 
+          trust_device: trustDevice,
         },
       });
-
       saveAuth(data);
       toast.success("2FA verified successfully");
-      const redirectPath = data.user?.role === "admin" ? "/admin" : "/dashboard";
+      const redirectPath =
+        data.user?.role === "admin" ? "/admin" : "/dashboard";
       router.push(redirectPath);
     } catch (err: any) {
       toast.error(err.message || "Invalid 2FA code");
@@ -138,17 +230,17 @@ export default function LoginPage() {
             </div>
 
             <div className="mb-6">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={trustDevice}
-                    onChange={(e) => setTrustDevice(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-slate-600 dark:text-slate-400">
-                    Don't ask on this device for 7 days
-                  </span>
-                </label>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={trustDevice}
+                  onChange={(e) => setTrustDevice(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-slate-600 dark:text-slate-400">
+                  Don't ask on this device for 7 days
+                </span>
+              </label>
             </div>
 
             <button
@@ -185,6 +277,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                 placeholder="you@example.com"
               />
@@ -199,10 +292,18 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete="current-password"
                 className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                 placeholder="••••••••"
               />
             </div>
+
+            {/* Cloudflare Turnstile widget (restored inside the login form) */}
+            {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && (
+              <div className="mb-6 flex justify-center" aria-hidden>
+                <div id="turnstile-widget" />
+              </div>
+            )}
 
             <button
               type="submit"
@@ -213,7 +314,7 @@ export default function LoginPage() {
             </button>
 
             <p className="text-center text-slate-600 dark:text-slate-400 mt-4 text-sm">
-              Don&apos;t have an account?{" "}
+              Don't have an account?{" "}
               <Link
                 href="/register"
                 className="text-blue-600 dark:text-blue-400 font-medium hover:underline"
@@ -223,6 +324,8 @@ export default function LoginPage() {
             </p>
           </form>
         )}
+
+        {/* Turnstile intentionally placed inside the login form above submit */}
       </div>
     </div>
   );

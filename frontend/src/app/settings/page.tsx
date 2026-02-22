@@ -155,6 +155,16 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">Account</h2>
           <div className="flex items-center gap-3 mb-5">
             <p className="text-sm text-slate-500 dark:text-slate-400">{profile?.email}</p>
+            <div className="ml-3 text-sm">
+              {profile?.email_verified ? (
+                <span className="text-green-600 dark:text-green-400">Email verified</span>
+              ) : (
+                <span className="text-slate-500 dark:text-slate-400">Email not verified</span>
+              )}
+              {profile?.role === 'admin' && (
+                <div className="text-xs text-slate-500 dark:text-slate-400">Admin accounts do not require email activation</div>
+              )}
+            </div>
             {profile?.role === "admin" && (
               <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400 border border-purple-200 dark:border-purple-800">
                 Admin

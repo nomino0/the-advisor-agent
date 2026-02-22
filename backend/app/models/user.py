@@ -27,6 +27,7 @@ class User(Base):
         SAEnum(UserRole, name="user_role"), default=UserRole.USER, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     totp_secret: Mapped[str] = mapped_column(String(255), nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     stripe_customer_id: Mapped[str] = mapped_column(String(255), nullable=True)

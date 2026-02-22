@@ -38,6 +38,14 @@ def create_trusted_device_token(user_id: str) -> str:
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
+def create_email_verification_token(data: dict, expires_hours: int = 24) -> str:
+    """Create a JWT token for email verification (default 24 hours)."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
+    to_encode.update({"exp": expire, "type": "email_verification"})
+    return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+
+
 
 def decode_token(token: str) -> Optional[dict]:
     """Decode and validate a JWT token."""

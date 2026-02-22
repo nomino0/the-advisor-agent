@@ -57,6 +57,7 @@ export function AdminUsers({ users }: AdminUsersProps) {
                            <span className="text-green-600 dark:text-green-400 text-xs font-medium flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500"></span> Active</span> 
                            : <span className="text-slate-400 text-xs font-medium flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Inactive</span>
                         }
+                      
                      </td>
                      <td className="px-6 py-4 text-slate-500 text-xs">
                         {new Date(u.created_at).toLocaleDateString()}
