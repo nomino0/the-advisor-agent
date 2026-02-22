@@ -15,8 +15,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build-time env (will be baked into the client bundle)
+
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
