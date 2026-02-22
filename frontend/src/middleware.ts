@@ -13,14 +13,22 @@ export function middleware(request: NextRequest) {
 
   // Read the auth token from cookies (set on login)
   const token = request.cookies.get("access_token")?.value;
-  const userRaw = request.cookies.get("user")?.value;
 
   let userRole: string | null = null;
-  if (userRaw) {
+  if (token) {
     try {
-      userRole = JSON.parse(decodeURIComponent(userRaw))?.role ?? null;
+      const base64Url = token.split('.')[1];
+      if (base64Url) {
+        let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4 !== 0) base64 += '=';
+        const jsonPayload = decodeURIComponent(
+          atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+        );
+        const parsed = JSON.parse(jsonPayload);
+        userRole = parsed.role || null;
+      }
     } catch {
-      // ignore parse error
+      // ignore parse error or invalid token
     }
   }
 

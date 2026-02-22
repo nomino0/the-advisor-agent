@@ -83,40 +83,54 @@ export function useAuth(options: { requireAuth?: boolean; requireAdmin?: boolean
     const t = getToken();
     const u = getUser();
 
-    // If requireAuth is true, we must have a token and user in sessionStorage.
-    // If not, we destroy everything and redirect to login.
+    // Let's do a quick initial check based on potentially stale/spoofed local storage
     if (requireAuth && (!t || !u)) {
-      // Prevent infinite loop: if we are already redirected to login by middleware (because of cookie),
-      // but then middleware sees cookie and redirects back to dashboard...
-      // We must clear the cookie here to break the loop. 
       clearAuth();
       toast.error("Session expired. Please log in again.");
       router.replace("/login");
       return;
     }
-    
-    // If we're on a public page (requireAuth=false) but have a token?
-    // The middleware handles redirect from /login -> /dashboard.
-    // But what if middleware passed us through (public page) but we have a "zombie" cookie 
-    // and no session storage? We should probably clean up to be safe.
+
     if (!requireAuth && !t && typeof document !== "undefined" && (document.cookie.includes("access_token=") || document.cookie.includes("user="))) {
-       clearAuth();
-    }
-
-    // Enforce 2FA setup for all users
-    if (requireAuth && u && !u.totp_enabled && pathname !== "/2fa-setup") {
-      router.replace("/2fa-setup");
-      return;
-    }
-
-    if (requireAdmin && u?.role !== "admin") {
-      router.replace("/dashboard");
-      return;
+      clearAuth();
     }
 
     setToken(t);
     setUser(u);
-    setLoading(false);
+
+    // Now securely fetch the real profile from the backend to prevent localStorage spoofing
+    let mounted = true;
+    if (t) {
+      import("@/lib/api").then(({ api }) => {
+        api("/api/v1/auth/me", { token: t })
+          .then((realUser) => {
+            if (!mounted) return;
+            setUser(realUser);
+            sessionStorage.setItem("user", JSON.stringify(realUser));
+
+            // Enforce secure checks on the REAL verified user data
+            if (requireAuth && !realUser.totp_enabled && pathname !== "/2fa-setup") {
+              router.replace("/2fa-setup");
+              return;
+            }
+
+            if (requireAdmin && realUser.role !== "admin") {
+              router.replace("/dashboard");
+              return;
+            }
+            setLoading(false);
+          })
+          .catch((err) => {
+            if (!mounted) return;
+            // If 401 or network error, let the api.ts handler or fallback cover it.
+            setLoading(false);
+          });
+      });
+    } else {
+      setLoading(false);
+    }
+
+    return () => { mounted = false; };
   }, [requireAuth, requireAdmin, router, pathname]);
 
   const logout = useCallback(() => {
