@@ -78,6 +78,14 @@ async def patch_schema():
         except Exception as e:
             logger.warning("     -> (Note) KB patch skipped: %s", e)
 
+        # 3. User email_verified column
+        logger.info("   - Checking 'users' schema for 'email_verified' column...")
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE"))
+            logger.info("     -> 'email_verified' column verified.")
+        except Exception as e:
+            logger.warning("     -> (Note) User email_verified patch skipped/failed: %s", e)
+
 async def seed_admin():
     logger.info("\n4. Seeding Admin User...")
     async with AsyncSessionLocal() as db:
