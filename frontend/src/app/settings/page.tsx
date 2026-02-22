@@ -11,6 +11,7 @@ interface UserProfile {
   id: string;
   email: string;
   full_name: string;
+  email_verified?: boolean;
   role: string;
   totp_enabled: boolean;
   github_connected: boolean;
