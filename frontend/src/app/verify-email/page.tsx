@@ -2,15 +2,30 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
 export default function VerifyEmailPage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<'loading'|'success'|'error'>('loading');
   const [message, setMessage] = useState('');
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-4">
+      <div className="w-full max-w-md text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-8 shadow-sm border border-slate-200 dark:border-slate-800">
+          <Suspense fallback={<p className="text-slate-600">Verifying...</p>}>
+            <VerifyEmailContent setStatus={setStatus} setMessage={setMessage} status={status} message={message} router={router} />
+          </Suspense>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VerifyEmailContent({ setStatus, setMessage, status, message, router }: { setStatus: any, setMessage: any, status: 'loading'|'success'|'error', message: string, router: any }) {
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -33,14 +48,10 @@ export default function VerifyEmailPage() {
   }, [searchParams]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 px-4">
-      <div className="w-full max-w-md text-center">
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-8 shadow-sm border border-slate-200 dark:border-slate-800">
-          {status === 'loading' && <p className="text-slate-600">Verifying...</p>}
-          {status === 'success' && <p className="text-green-600">{message}</p>}
-          {status === 'error' && <p className="text-red-600">{message}</p>}
-        </div>
-      </div>
-    </div>
+    <>
+      {status === 'loading' && <p className="text-slate-600">Verifying...</p>}
+      {status === 'success' && <p className="text-green-600">{message}</p>}
+      {status === 'error' && <p className="text-red-600">{message}</p>}
+    </>
   );
 }
