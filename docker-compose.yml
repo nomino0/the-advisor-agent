@@ -60,6 +60,9 @@ services:
         condition: service_healthy
     volumes:
       - upload_data:/app/uploads
+      # Mount project .env into the container at runtime for development convenience.
+      # This does NOT bake secrets into the image; it only mounts the local file when running compose.
+      - ./.env:/app/.env:ro
 
   # ─── Frontend (Next.js) ────────────────────
   frontend:
@@ -67,11 +70,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+    env_file: .env
     container_name: cloudwise-frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
       - "3000:3000"
     depends_on:

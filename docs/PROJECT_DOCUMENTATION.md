@@ -9,30 +9,26 @@
 1. [Executive Summary](#1-executive-summary)
 2. [Problem Statement](#2-problem-statement)
 3. [Solution Overview](#3-solution-overview)
-4. [Production Security & Infrastructure Hardening](#4-production-security--infrastructure-hardening)
+4. [Production Security & Infrastructure Hardening](#4-production-security-infrastructure-hardening)
 5. [Platform Architecture](#5-platform-architecture)
 6. [Multi-Agent System Design](#6-multi-agent-system-design)
-7. [Agent Definitions & Roles](#7-agent-definitions--roles)
-8. [Agent-to-Agent (A2A) Communication Protocol](#8-agent-to-agent-a2a-communication-protocol)
-9. [Agentic RAG System](#9-agentic-rag-system)
-10. [MCP Integration](#10-mcp-integration)
-11. [Code Analysis Engine — The 7 Pillars](#11-code-analysis-engine--the-7-pillars)
-12. [Cloud Configuration & Provider Recommendation Engine](#12-cloud-configuration--provider-recommendation-engine)
-13. [Security Vulnerability Detection](#13-security-vulnerability-detection)
-14. [User-Facing Features](#14-user-facing-features)
-15. [Admin Panel](#15-admin-panel)
-16. [Authentication & Authorization](#16-authentication--authorization)
-17. [Data Privacy & Peer-to-Peer Architecture](#17-data-privacy--peer-to-peer-architecture)
-18. [API Design & Input/Output Schemas](#18-api-design--inputoutput-schemas)
-19. [Security Hardening (Blue Team)](#19-security-hardening-blue-team)
-20. [Observability, Logging & Monitoring](#20-observability-logging--monitoring)
-21. [Decision Explainability (XAI)](#21-decision-explainability-xai)
-22. [Technology Stack](#22-technology-stack)
-23. [Database Design](#23-database-design)
-24. [Deployment Architecture](#24-deployment-architecture)
-25. [Testing Strategy](#25-testing-strategy)
-26. [Project Roadmap & Milestones](#26-project-roadmap--milestones)
-27. [Appendix](#27-appendix)
+7. [Agent Definitions & Roles](#7-agent-definitions-roles)
+8. [MCP Integration](#8-mcp-integration)
+9. [Code Analysis Engine — The 7 Pillars](#9-code-analysis-engine-—-the-7-pillars)
+10. [Cloud Configuration & Provider Recommendation Engine](#10-cloud-configuration-provider-recommendation-engine)
+11. [Security Vulnerability Detection](#11-security-vulnerability-detection)
+12. [User-Facing Features](#12-user-facing-features)
+13. [Admin Panel](#13-admin-panel)
+14. [Authentication & Authorization](#14-authentication-authorization)
+15. [Data Privacy & Peer-to-Peer Architecture](#15-data-privacy-peer-to-peer-architecture)
+16. [API Design & Input/Output Schemas](#16-api-design-inputoutput-schemas)
+17. [Security Hardening (Blue Team)](#17-security-hardening-blue-team)
+18. [5 Enterprise Security Hardening (Infrastructure & Application Layer)](#18-5-enterprise-security-hardening-infrastructure-application-layer)
+19. [Technology Stack](#19-technology-stack)
+20. [Database Design](#20-database-design)
+21. [Deployment Architecture](#21-deployment-architecture)
+22. [Project Roadmap & Milestones](#22-project-roadmap-milestones)
+23. [Appendix](#23-appendix)
 
 ---
 
@@ -698,214 +694,7 @@ ELSE:
 
 ---
 
-## 8. Agent-to-Agent (A2A) Communication Protocol
-
-### 8.1 Message Format
-
-All inter-agent communication follows a standardized message envelope:
-
-```json
-{
-  "message_id": "uuid-v4",
-  "timestamp": "ISO-8601",
-  "sender": {
-    "agent_id": "security_analyst_agent",
-    "agent_type": "executor",
-    "instance_id": "sa-001"
-  },
-  "recipient": {
-    "agent_id": "critic_agent",
-    "agent_type": "validator"
-  },
-  "message_type": "TASK_RESULT | TASK_REQUEST | REVISION_REQUEST | PING | STATUS",
-  "correlation_id": "uuid-v4 (links to original user request)",
-  "payload": {},
-  "metadata": {
-    "execution_time_ms": 4520,
-    "tool_calls_used": 8,
-    "confidence_score": 0.87,
-    "tokens_consumed": 12450
-  }
-}
-```
-
-### 8.2 Communication Patterns
-
-```
-┌──────────────────────────────────────────────────────┐
-│                   Communication Bus                   │
-│                                                       │
-│  Pattern 1: Fan-Out (Planner → Executors)            │
-│  ─────────────────────────────────────                │
-│  Planner sends parallel task requests to all          │
-│  executor agents simultaneously.                      │
-│                                                       │
-│  Pattern 2: Fan-In (Executors → Critic)              │
-│  ─────────────────────────────────────                │
-│  Critic waits for all executor results before         │
-│  beginning validation.                                │
-│                                                       │
-│  Pattern 3: Feedback Loop (Critic → Planner)         │
-│  ─────────────────────────────────────                │
-│  Critic can send revision requests back to            │
-│  Planner (max 2 loops).                               │
-│                                                       │
-│  Pattern 4: Sequential (Critic → Reporter)           │
-│  ─────────────────────────────────────                │
-│  Report generation only starts after Critic           │
-│  approval.                                            │
-└──────────────────────────────────────────────────────┘
-```
-
-### 8.3 Shared State (LangGraph State)
-
-```python
-from typing import TypedDict, List, Optional
-from pydantic import BaseModel
-
-class AnalysisState(TypedDict):
-    """Shared state accessible by all agents in the workflow."""
-    
-    # Input
-    request_id: str
-    user_id: str
-    code_metadata: dict          # Language, framework, structure (no code content)
-    user_preferences: dict       # Detail level, format preferences
-    
-    # Planner output
-    execution_plan: dict
-    
-    # Executor outputs
-    security_report: Optional[dict]
-    best_practices_report: Optional[dict]
-    cloud_config_report: Optional[dict]
-    
-    # Critic output
-    validation_result: Optional[dict]
-    revision_count: int          # Track revision loops (max 2)
-    
-    # Final output
-    final_report: Optional[dict]
-    
-    # Metadata
-    total_tokens_used: int
-    total_execution_time_ms: int
-    agent_trace_log: List[dict]  # Full execution trace
-```
-
----
-
-## 9. Agentic RAG System
-
-### 9.1 Overview
-
-The Agentic RAG (Retrieval-Augmented Generation) system is the knowledge backbone of CloudWise AI. Unlike simple RAG, our **Agentic RAG** allows agents to:
-- Decide **when** to retrieve information (not every query needs retrieval)
-- Formulate **optimal queries** based on the current analysis context
-- **Cross-reference** multiple knowledge sources
-- **Verify** their own outputs against retrieved knowledge
-
-### 9.2 Knowledge Bases
-
-| Knowledge Base | Content | Update Frequency | Source |
-|---|---|---|---|
-| **Cloud Provider Docs** | AWS, GCP, Azure official documentation, pricing pages, best practices guides | Weekly (automated sync) | Official docs, APIs |
-| **Security Knowledge** | OWASP guidelines, CVE database, CIS benchmarks, NIST frameworks | Daily (CVE feed), Weekly (others) | NVD, OWASP, CIS |
-| **Best Practices** | Language-specific guidelines, framework docs, design patterns, anti-patterns | Monthly | Community sources, official guides |
-| **Deployment Templates** | IaC templates (Terraform, Pulumi, CloudFormation), Dockerfiles, CI/CD configs | On-demand (admin curated) | Admin uploads |
-| **Pricing Data** | Current cloud pricing for compute, storage, networking, managed services | Daily | Cloud provider pricing APIs |
-| **Agent Instructions** | Custom instructions for specific agents (e.g., specific security policies) | On-Demand | Admin Panel |
-
-### 9.3 RAG Pipeline
-
-```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Agent Query │ ──→ │  Query       │ ──→ │  Embedding   │
-│  (natural    │     │  Reformulator│     │  Model       │
-│   language)  │     │  (LLM)       │     │  (text-      │
-└──────────────┘     └──────────────┘     │   embedding) │
-                                          └──────┬───────┘
-                                                 │
-                                                 ▼
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Reranker    │ ←── │  Retrieved   │ ←── │  Vector DB   │
-│  (Cross-     │     │  Chunks      │     │  (ChromaDB / │
-│   encoder)   │     │  (Top-K=20)  │     │   Pinecone)  │
-└──────┬───────┘     └──────────────┘     └──────────────┘
-       │
-       ▼
-┌──────────────┐     ┌──────────────┐
-│  Top 5       │ ──→ │  Agent       │
-│  Relevant    │     │  Response    │
-│  Chunks      │     │  Generation  │
-└──────────────┘     └──────────────┘
-```
-
-### 9.4 Document Ingestion Pipeline (Admin-Managed)
-
-**Updated Feature (v1.1): Knowledge Base Crawler**
-The Admin Panel now includes a web crawler that can ingest content directly from URLs.
-1. Admin enters a URL (e.g., a new AWS service page or ISO standard).
-2. `CrawlerService` fetches the HTML and cleans it using `BeautifulSoup`.
-3. The content is summarized by an LLM into a dense "Knowledge Context".
-4. This summaries context is stored in `KnowledgeBaseSource.processed_content`.
-5. Agents automatically receive this context when relevant to their role.
-
-```
-Admin uploads document (PDF, MD, HTML, TXT) OR Provides URL
-           │
-           ▼
-┌──────────────────────┐
-│  Document Processor  │
-│  • Format detection  │
-│  • Text extraction   │
-│  • Metadata parsing  │
-│  • URL Crawling      │ <--- NEW
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│  Summarization /     │
-│  Chunking Engine     │
-│  • Semantic chunking │
-│  • LLM Summarization │ <--- NEW
-└──────────┬───────────┘
-           │
-           ▼
-┌──────────────────────┐
-│  Knowledge Store     │
-│  • Vector DB (RAG)   │
-│  • Agent Context     │
-└──────────────────────┘
-```
-
-### 9.5 Anti-Hallucination via RAG Verification
-
-Every agent output that makes a factual claim (e.g., "AWS RDS supports up to 64 TB storage") is cross-referenced against the RAG knowledge base by the Critic Agent:
-
-```python
-# Pseudo-code for verification
-def verify_claim(claim: str, knowledge_base: str) -> VerificationResult:
-    """
-    Retrieves relevant documents and checks if the claim is supported.
-    Returns: VERIFIED, CONTRADICTED, or UNVERIFIABLE
-    """
-    relevant_docs = rag_retrieve(claim, kb=knowledge_base, top_k=5)
-    
-    verification_prompt = f"""
-    Claim: {claim}
-    Evidence: {relevant_docs}
-    
-    Is this claim supported by the evidence? 
-    Answer: VERIFIED / CONTRADICTED / UNVERIFIABLE
-    Explanation: ...
-    """
-    return llm_verify(verification_prompt)
-```
-
----
-
-## 10. MCP Integration
+## 8. MCP Integration
 
 ### 10.1 What is MCP?
 
@@ -993,7 +782,7 @@ tools = [
 
 ---
 
-## 11. Code Analysis Engine — The 7 Pillars
+## 9. Code Analysis Engine — The 7 Pillars
 
 ### 11.1 Pillar Definitions and Heuristics
 
@@ -1099,7 +888,7 @@ Each pillar is scored on a 0–100 scale:
 
 ---
 
-## 12. Cloud Configuration & Provider Recommendation Engine
+## 10. Cloud Configuration & Provider Recommendation Engine
 
 ### 12.1 Application Profiling
 
@@ -1162,7 +951,7 @@ The platform generates the following visual graphs for the user:
 
 ---
 
-## 13. Security Vulnerability Detection
+## 11. Security Vulnerability Detection
 
 ### 13.1 Multi-Layer Security Scanning
 
@@ -1210,7 +999,7 @@ Layer 5: AI-Powered Contextual Analysis
 
 ---
 
-## 14. User-Facing Features
+## 12. User-Facing Features
 
 ### 14.1 User Dashboard
 
@@ -1294,7 +1083,7 @@ Layer 5: AI-Powered Contextual Analysis
 
 ---
 
-## 15. Admin Panel
+## 13. Admin Panel
 
 ### 15.1 Admin Dashboard
 
@@ -1420,7 +1209,7 @@ The Admin Panel includes a comprehensive **Security & Audit System** designed to
 
 ---
 
-## 16. Authentication & Authorization
+## 14. Authentication & Authorization
 
 ### 16.1 Authentication Flow
 
@@ -1489,7 +1278,7 @@ To ensure maximum security around session termination (the "Close Tab = Logout" 
 
 ---
 
-## 17. Data Privacy & Peer-to-Peer Architecture
+## 15. Data Privacy & Peer-to-Peer Architecture
 
 ### 17.1 Zero-Persistence Guarantee
 
@@ -1553,7 +1342,7 @@ To ensure maximum security around session termination (the "Close Tab = Logout" 
 
 ---
 
-## 18. API Design & Input/Output Schemas
+## 16. API Design & Input/Output Schemas
 
 ### 18.1 API Endpoints
 
@@ -1669,7 +1458,7 @@ Content-Type: multipart/form-data
 
 ---
 
-## 19. Security Hardening (Blue Team)
+## 17. Security Hardening (Blue Team)
 
 ### 19.1 Secure API Key Management
 
@@ -1761,7 +1550,7 @@ class ToolOutputValidator:
 | **Penetration Testing** | Pre-launch and quarterly | Required |
 | **Incident Response** | Documented runbook | Required |
 
-## 19.5 Enterprise Security Hardening (Infrastructure & Application Layer)
+## 18. 5 Enterprise Security Hardening (Infrastructure & Application Layer)
 
 We have implemented strict enterprise-grade security controls directly in the application code and infrastructure.
 
@@ -1797,144 +1586,7 @@ To prevent Host Header Injection attacks (which can lead to cache poisoning or p
 
 ---
 
-## 20. Observability, Logging & Monitoring
-
-### 20.1 Three Pillars of Observability
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│              Observability Architecture                       │
-│                                                              │
-│  ┌─────────────────┐                                        │
-│  │    TRACES        │  OpenTelemetry + LangSmith/LangFuse   │
-│  │                  │  • End-to-end request tracing          │
-│  │                  │  • Agent execution traces              │
-│  │                  │  • LLM call traces (prompts, tokens)   │
-│  │                  │  • Tool invocation traces              │
-│  │                  │  • Cross-agent correlation IDs         │
-│  └─────────────────┘                                        │
-│                                                              │
-│  ┌─────────────────┐                                        │
-│  │    METRICS       │  Prometheus + Grafana                  │
-│  │                  │  • Request latency (p50, p95, p99)     │
-│  │                  │  • Agent success/failure rates         │
-│  │                  │  • Token consumption per agent         │
-│  │                  │  • Queue depths and processing times   │
-│  │                  │  • Cost per analysis                   │
-│  │                  │  • Active users, analyses/day          │
-│  └─────────────────┘                                        │
-│                                                              │
-│  ┌─────────────────┐                                        │
-│  │    LOGS          │  Structured JSON logging               │
-│  │                  │  • Request/response logs               │
-│  │                  │  • Agent decision logs                 │
-│  │                  │  • Error logs with stack traces        │
-│  │                  │  • Audit logs (admin actions)          │
-│  │                  │  • Security event logs                 │
-│  └─────────────────┘                                        │
-└──────────────────────────────────────────────────────────────┘
-```
-
-### 20.2 Key Metrics & Alerts
-
-| Metric | Alert Threshold | Action |
-|---|---|---|
-| Analysis error rate | > 5% in 5 min | Page on-call engineer |
-| Agent latency (p99) | > 60s | Warning alert |
-| LLM API error rate | > 10% in 1 min | Fallback to secondary provider |
-| Queue depth | > 50 pending | Scale up workers |
-| Memory usage | > 85% | Scale up / investigate leak |
-| API response time (p95) | > 2s | Warning + investigation |
-| Failed 2FA attempts | > 10/user/hour | Lock account + security alert |
-| Unusual token usage | > 3x average | Cost alert + investigation |
-
-### 20.3 Execution Logging Schema
-
-```json
-{
-  "log_type": "agent_execution",
-  "timestamp": "ISO-8601",
-  "trace_id": "uuid",
-  "span_id": "uuid",
-  "correlation_id": "uuid (user request)",
-  "agent": {
-    "id": "security_analyst_agent",
-    "instance": "sa-001"
-  },
-  "event": "tool_invocation",
-  "data": {
-    "tool": "static_analysis_scanner",
-    "input_summary": "Scan Python files for OWASP top-10",
-    "output_summary": "Found 3 HIGH, 2 MEDIUM findings",
-    "execution_time_ms": 2345,
-    "tokens_used": 450,
-    "success": true
-  },
-  "decision_reasoning": "Chose OWASP ruleset based on detected web framework (FastAPI)"
-}
-```
-
----
-
-## 21. Decision Explainability (XAI)
-
-### 21.1 Explainability Framework
-
-Every recommendation and finding includes an explanation chain:
-
-```json
-{
-  "finding": {
-    "title": "Recommend GCP Cloud Run over AWS ECS",
-    "explanation_chain": [
-      {
-        "step": 1,
-        "reasoning": "Application is a Python FastAPI service — GCP has first-class Python support",
-        "evidence": "Detected FastAPI framework in requirements.txt",
-        "confidence": 0.95
-      },
-      {
-        "step": 2,
-        "reasoning": "Application is stateless — ideal for serverless containers",
-        "evidence": "No session state or local file storage detected in code",
-        "confidence": 0.88
-      },
-      {
-        "step": 3,
-        "reasoning": "GCP Cloud Run has lower cost for 100-1000 RPS workloads",
-        "evidence": "Pricing comparison from RAG: Cloud Run $0.00002400/vCPU-second vs ECS Fargate $0.04048/vCPU-hour",
-        "confidence": 0.92,
-        "source": "GCP Pricing Docs (retrieved 2026-02-17)"
-      },
-      {
-        "step": 4,
-        "reasoning": "Cloud Run has simpler deployment (no cluster management)",
-        "evidence": "Deployment complexity scoring: Cloud Run 2/10, ECS 5/10",
-        "confidence": 0.90
-      }
-    ],
-    "overall_confidence": 0.91,
-    "alternative_considered": "AWS ECS Fargate — viable but higher cost and complexity",
-    "human_readable": "We recommend GCP Cloud Run because your Python FastAPI app is stateless, making it ideal for serverless containers. Cloud Run offers lower costs at your expected scale (100-1000 RPS) and significantly simpler deployment compared to AWS ECS."
-  }
-}
-```
-
-### 21.2 Confidence Scoring
-
-Every agent output includes confidence scores:
-
-| Score Range | Meaning | Display |
-|---|---|---|
-| 0.90 – 1.00 | Very High Confidence | Strong recommendation |
-| 0.75 – 0.89 | High Confidence | Recommendation with notes |
-| 0.60 – 0.74 | Moderate Confidence | Suggestion (verify manually) |
-| 0.40 – 0.59 | Low Confidence | Possible concern (needs human review) |
-| 0.00 – 0.39 | Very Low Confidence | Flagged for manual review only |
-
----
-
-## 22. Technology Stack
+## 19. Technology Stack
 
 ### 22.1 Complete Stack
 
@@ -2169,7 +1821,7 @@ cloudwise-ai/
 
 ---
 
-## 23. Database Design
+## 20. Database Design
 
 ### 23.1 Entity-Relationship Diagram
 
@@ -2256,7 +1908,7 @@ cloudwise-ai/
 
 ---
 
-## 24. Deployment Architecture
+## 21. Deployment Architecture
 
 ### 24.1 Production Deployment
 
@@ -2321,71 +1973,7 @@ cloudwise-ai/
 
 ---
 
-## 25. Testing Strategy
-
-### 25.1 Testing Pyramid
-
-```
-           ╱╲
-          ╱  ╲         E2E Tests (5%)
-         ╱    ╲        Full user flows, real LLM calls (mocked in CI)
-        ╱──────╲
-       ╱        ╲      Integration Tests (25%)
-      ╱          ╲     Agent communication, API endpoints, DB queries
-     ╱────────────╲
-    ╱              ╲    Unit Tests (70%)
-   ╱                ╲   Individual functions, agent logic, validators
-  ╱──────────────────╲
-```
-
-### 25.2 Testing Breakdown
-
-| Test Type | What We Test | Tools |
-|---|---|---|
-| **Unit** | Agent logic, tool validators, scoring functions, schemas | pytest, unittest.mock |
-| **Integration** | Agent-to-agent communication, API endpoints, DB operations | pytest, httpx, testcontainers |
-| **E2E** | Full analysis flow (upload → report), auth flows, admin flows | Playwright (frontend), pytest (backend) |
-| **Security** | Prompt injection, auth bypass, IDOR, rate limiting | Custom security test suite |
-| **Performance** | Latency under load, concurrent analyses | Locust, k6 |
-| **LLM-Specific** | Prompt effectiveness, output quality, hallucination rate | Custom eval suite + human review |
-
-### 25.3 Agent-Specific Testing
-
-```python
-# Example: Testing the Security Analyst Agent
-class TestSecurityAnalystAgent:
-    
-    def test_detects_hardcoded_secret(self):
-        """Agent should flag hardcoded API keys."""
-        code = 'API_KEY = "sk-1234567890abcdef"'
-        result = security_analyst.analyze(code, language="python")
-        assert any(f.category == "hardcoded_secret" for f in result.findings)
-    
-    def test_detects_sql_injection(self):
-        """Agent should flag SQL injection vectors."""
-        code = 'cursor.execute(f"SELECT * FROM users WHERE id = {user_input}")'
-        result = security_analyst.analyze(code, language="python")
-        assert any(f.category == "sql_injection" for f in result.findings)
-    
-    def test_respects_tool_permissions(self):
-        """Agent should not call tools it doesn't have access to."""
-        with pytest.raises(PermissionError):
-            security_analyst.invoke_tool("cloud_pricing_calculator", {})
-    
-    def test_output_schema_compliance(self):
-        """Agent output must match expected schema."""
-        result = security_analyst.analyze(sample_code, language="python")
-        SecurityReport.model_validate(result)  # Pydantic validation
-    
-    def test_max_tool_calls_enforced(self):
-        """Agent should not exceed max tool call limit."""
-        result = security_analyst.analyze(large_codebase, language="python")
-        assert result.metadata.tool_calls_used <= 15
-```
-
----
-
-## 26. Project Roadmap & Milestones
+## 22. Project Roadmap & Milestones
 
 ### Phase 1: Foundation (Weeks 1-2)
 - [x] Project documentation (this document)
@@ -2463,7 +2051,7 @@ class TestSecurityAnalystAgent:
 
 ---
 
-## 27. Appendix
+## 23. Appendix
 
 ### A. Glossary
 
